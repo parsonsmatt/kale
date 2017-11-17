@@ -109,10 +109,12 @@ fileToTask dir file = runMaybeT $
             moduleContents <- liftIO $ readFile fileName
             pure (mkTask moduleContents name (intercalate "." (reverse (name : xs))))
   where
+    stripSuffixes :: String -> Maybe String
     stripSuffixes x =
         stripSuffix "Task.hs" x <|> stripSuffix "Task.lhs" x
     stripSuffix :: Eq a => [a] -> [a] -> Maybe [a]
-    stripSuffix suffix str = reverse <$> stripPrefix (reverse suffix) (reverse str)
+    stripSuffix suffix str =
+        reverse <$> stripPrefix (reverse suffix) (reverse str)
 
 mkTask :: String -> String -> String -> Task
 mkTask fileContent name mod_ = Task

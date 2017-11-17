@@ -1,6 +1,6 @@
 name:                kale
 version:             0.1.0.0
-synopsis:            An automatic task discovery and runner
+synopsis:            Automatic command line task discovery
 description:         Please see README.md for more details.
 homepage:            https://github.com/parsonsmatt/kale#readme
 license:             BSD3
