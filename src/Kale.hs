@@ -83,7 +83,7 @@ taskToSum = taskName
 
 mkCaseOf :: Task -> String
 mkCaseOf task = concat
-    [taskName task, " -> ", taskModule task, ".task"]
+    [taskName task, " -> ", taskModule task, "Task.task"]
 
 indent :: Int -> [String] -> [String]
 indent n = map (replicate n ' ' ++)

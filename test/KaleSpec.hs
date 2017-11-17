@@ -10,7 +10,7 @@ spec = do
         it "is empty on empty tasks" $
             driver [] `shouldBe` ""
         it "has command sum" $
-            driver [Task "Foo.BarTask" Nothing "Bar"]
+            driver [Task "Foo.Bar" Nothing "Bar"]
                 `shouldBe` unlines
                     [ "kaleMain :: IO ()"
                     , "kaleMain = do"
