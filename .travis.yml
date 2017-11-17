@@ -123,6 +123,7 @@ install:
   set -ex
   case "$BUILD" in
     stack)
+      stack setup
       stack build hlint
       stack --no-terminal --install-ghc $ARGS test --bench --only-dependencies
       ;;
