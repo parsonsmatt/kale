@@ -11,7 +11,7 @@ spec = do
             driver [] `shouldBe` ""
         it "has command sum" $
             driver [Task "Foo.BarTask" Nothing "Bar"]
-                `shouldBe` unlines 
+                `shouldBe` unlines
                     [ "kaleMain :: IO ()"
                     , "kaleMain = do"
                     , "  cmd <- getRecord \"kale-discovery\""
@@ -28,11 +28,11 @@ spec = do
     describe "decs" $ do
         it "roughly parses declarations" $ do
             decs decs1
-                `shouldBe` 
+                `shouldBe`
                     [ "data Foo = Bar"
                     ]
-            decs decs0 
-                `shouldBe` 
+            decs decs0
+                `shouldBe`
                     [ "module Foo where"
                     , "import Asdf"
                     , "data Foo = Bar | Baz"
