@@ -8,9 +8,9 @@ spec :: Spec
 spec = do
     describe "driver" $ do
         it "is empty on empty tasks" $
-            driver [] `shouldBe` ""
+            (unDriver $ driver []) `shouldBe` ""
         it "has command sum" $
-            driver [Task "Foo.BarTask" Nothing "Bar"]
+            (unDriver $ driver [Task (TaskModule "Foo.BarTask") Nothing (TaskName "Bar")])
                 `shouldBe` unlines 
                     [ "main :: IO ()"
                     , "main = do"
