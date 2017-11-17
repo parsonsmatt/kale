@@ -12,8 +12,8 @@ spec = do
         it "has command sum" $
             driver [Task "Foo.BarTask" Nothing "Bar"]
                 `shouldBe` unlines 
-                    [ "main :: IO ()"
-                    , "main = do"
+                    [ "kaleMain :: IO ()"
+                    , "kaleMain = do"
                     , "  cmd <- getRecord \"kale-discovery\""
                     , "  case (cmd :: Command) of"
                     , "    Bar -> Foo.BarTask.task"
