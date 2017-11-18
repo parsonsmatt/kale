@@ -31,6 +31,7 @@ data Task = Task
     , taskName   :: String
     -- ^ The name of the task.
     }
+    deriving (Eq, Show)
 
 -- | 'runKale' is the entry point of the Kale task discovery tool.
 runKale :: IO ()
