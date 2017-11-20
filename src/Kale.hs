@@ -81,9 +81,11 @@ taskToSum task = taskName task ++ case taskArgs task of
     Just args -> stripArgs args
 
 stripArgs :: String -> String
-stripArgs x = case stripPrefix "data Args = Args" x of
-    Nothing -> error $ "stripArgs called with a weird string: " ++ x
-    Just a -> a
+stripArgs =
+    (' ' :)
+    . (++ "}")
+    . dropWhile (/= '{')
+    . takeWhile (/= '}')
 
 mkCaseOf :: Task -> String
 mkCaseOf task = concat
