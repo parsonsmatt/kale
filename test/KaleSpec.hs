@@ -24,6 +24,10 @@ spec = do
             casify "HelloWorld" `shouldBe` "Hello_World"
         it "acts strange with many caps letters" $
             casify "HTTPWorker" `shouldBe` "H_T_T_P_Worker"
+        -- the inputs to casify will always be module names, so the below should
+        -- not happen
+        it "acts strange with initial lowercase" $
+            casify "lowHigh" `shouldBe` "l_o_w_High"
 
     describe "decs" $ do
         it "roughly parses declarations" $ do
@@ -49,6 +53,60 @@ spec = do
                 `shouldBe`
                     [ "data Foo = Foo { fooName :: String}"
                     ]
+
+    describe "mkCommandSum" $ do
+        it "is empty on empty task lists" $
+            unCommandSumType (mkCommandSum []) `shouldBe` ""
+        it "lists tasktnames properly" $
+            unCommandSumType (mkCommandSum [task0, task1])
+                `shouldBe` concat
+                    [ "data Command = Name { foo :: Int }"
+                    , " | Other_Name deriving (Eq, "
+                    , "Show, Read, Generic, ParseRecord)"
+                    ]
+
+    describe "mkCaseOf" $ do
+        it "works with args" $ do
+            mkCaseOf task0
+                `shouldBe`
+                    "Name{..} -> Module.FooTask.task Module.FooTask.Args {..}"
+        it "works without args" $ do
+            mkCaseOf task1
+                `shouldBe`
+                    "Other_Name -> Module1.FooTask.task"
+
+    describe "mkTask" $ do
+        it "is Nothing for taskArgs when fileContent is empty" $
+            mkTask "" "OtherName" "Module1.Foo" `shouldBe` task1
+
+    describe "pathToModule" $ do
+        it "parses directories and file extensions" $
+            pathToModule "foo/bar.baz" == "Bar" `shouldBe` True
+
+    describe "importList" $ do
+        it "pulls out taskModules and splits into newlines" $
+            unImportList (importList [task0, task1]) `shouldBe`
+                unlines [
+                        "import qualified Module.FooTask",
+                        "import qualified Module1.FooTask"
+                        ]
+
+    describe "findArgs" $ do
+        it "correctly finds arguments" $ do
+            findArgs args0
+                `shouldBe`
+                    Just "data Args = Args { fooId :: Int , barId :: Int }"
+
+args0 :: String
+args0 = unlines
+    [ "module ASdf where"
+    , ""
+    , "data Args"
+    , "  = Args"
+    , "  { fooId :: Int"
+    , "  , barId :: Int"
+    , "  }"
+    ]
 
 decs0 :: String
 decs0 = unlines
@@ -82,3 +140,19 @@ decs3 = unlines
     , " fooName :: String"
     , "}"
     ]
+
+decs4 :: String
+decs4 = unlines
+    [ "module Wat where"
+    , "data Args = Args"
+    , "  { fooName :: String"
+    , "  , fooAge  :: Int"
+    , "  }"
+    ]
+
+
+task0 :: Task
+task0 = Task (TaskModule "Module.Foo") (TaskArgs <$> Just "data Args = Args { foo :: Int }") (TaskName "Name")
+
+task1 :: Task
+task1 = Task (TaskModule "Module1.Foo") (TaskArgs <$> Nothing) (TaskName "Other_Name")

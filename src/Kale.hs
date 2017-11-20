@@ -7,25 +7,20 @@ module Kale where
 import           Control.Applicative
 import           Control.Monad
 import           Control.Monad.IO.Class
-import           Control.Monad.Trans.Maybe
-import           Data.Char
-import           Data.List
-import           Data.Maybe
-import           Data.String
-import           Data.Traversable          (for)
+import           Control.Monad.Trans.Maybe (MaybeT(..))
+import           Data.Char                 (isAlphaNum, isLower, isSpace,
+                                            isUpper, toUpper)
+import           Data.List                 (foldl', groupBy, intercalate, sort,
+                                            stripPrefix, isPrefixOf, find)
+import           Data.Maybe                (catMaybes)
 import           System.Directory          (doesDirectoryExist, doesFileExist,
                                             getDirectoryContents)
 import           System.Environment        (getArgs)
-import           System.Exit
 import           System.FilePath
-import           System.IO
 
-instance IsString ShowS where
-  fromString = showString
-
-newtype TaskArgs = TaskArgs { unTaskArgs :: String}
-newtype TaskModule = TaskModule { unTaskModule :: String }
-newtype TaskName = TaskName { unTaskName :: String }
+newtype TaskArgs = TaskArgs { unTaskArgs :: String} deriving (Eq, Show)
+newtype TaskModule = TaskModule { unTaskModule :: String } deriving (Eq, Show)
+newtype TaskName = TaskName { unTaskName :: String } deriving (Eq, Show)
 
 data Task = Task
     { taskModule :: TaskModule
@@ -35,6 +30,7 @@ data Task = Task
     , taskName   :: TaskName
     -- ^ The name of the task.
     }
+    deriving (Eq, Show)
 
 -- | 'runKale' is the entry point of the Kale task discovery tool.
 runKale :: IO ()
@@ -49,8 +45,9 @@ runKale = do
             print kaleArgs
 
 newtype TaskModuleContents = TaskModuleContents { unTaskModuleContents :: String }
+
 writeTaskModule :: FilePath -> TaskModuleContents -> IO ()
-writeTaskModule dest taskModule = writeFile dest (unTaskModuleContents taskModule)
+writeTaskModule dest taskModuleContents = writeFile dest (unTaskModuleContents taskModuleContents)
 
 mkTaskModule :: FilePath -> [Task] -> TaskModuleContents
 mkTaskModule src tasks = TaskModuleContents $ unlines
@@ -59,6 +56,7 @@ mkTaskModule src tasks = TaskModuleContents $ unlines
   , "{-# LANGUAGE DeriveGeneric #-}"
   , "{-# LANGUAGE DeriveAnyClass #-}"
   , "{-# LANGUAGE OverloadedStrings #-}"
+  , "{-# LANGUAGE RecordWildCards #-}"
   , ""
   , "module " ++ pathToModule src ++ " where"
   , ""
@@ -85,17 +83,40 @@ driver tasks = Driver $ unlines $
 newtype CommandSumType = CommandSumType { unCommandSumType :: String }
 
 mkCommandSum :: [Task] -> CommandSumType
-mkCommandSum [] = CommandSumType ""
+mkCommandSum [] = CommandSumType $ ""
 mkCommandSum tasks = CommandSumType $ "data Command = "
-    ++ intercalate "|" (map (unTaskName . taskToSum) tasks)
+    ++ intercalate " | " (map (unTaskName . taskToSum) tasks)
     ++ " deriving (Eq, Show, Read, Generic, ParseRecord)"
 
 taskToSum :: Task -> TaskName
-taskToSum = taskName
+taskToSum task = TaskName $ (unTaskName . taskName $ task) ++ case taskArgs task of
+    Nothing -> ""
+    Just args -> stripArgs $ args
+
+stripArgs :: TaskArgs -> String
+stripArgs =
+    (' ' :)
+    . (++ "}")
+    . dropWhile (/= '{')
+    . takeWhile (/= '}')
+    . unTaskArgs
 
 mkCaseOf :: Task -> String
 mkCaseOf task = concat
-    [taskName task, " -> ", taskModule task, "Task.task"]
+    [ unTaskName . taskName $ task
+    , maybe "" (const "{..}") (taskArgs task)
+    , " -> "
+    , unTaskModule . taskModule $ task
+    , "Task.task"
+    , case taskArgs task of
+        Nothing ->
+            ""
+        Just _ -> concat
+            [ " "
+            , unTaskModule . taskModule $ task
+            , "Task.Args {..}"
+            ]
+    ]
 
 indent :: Int -> [String] -> [String]
 indent n = map (replicate n ' ' ++)
@@ -138,9 +159,8 @@ mkTask fileContent name mod_ = Task
 casify :: String -> String
 casify str = intercalate "_" $ groupBy (\a b -> isUpper a && isLower b) str
 
-
 findArgs :: String -> Maybe String
-findArgs file =  Nothing
+findArgs = find ("data Args" `isPrefixOf`) . decs
 
 decs :: String -> [String]
 decs = reverse . fmap (collapseSpace . concat . reverse) . foldl' go [] . lines
