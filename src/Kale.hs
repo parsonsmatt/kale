@@ -7,21 +7,16 @@ module Kale where
 import           Control.Applicative
 import           Control.Monad
 import           Control.Monad.IO.Class
-import           Control.Monad.Trans.Maybe
-import           Data.Char
-import           Data.List
-import           Data.Maybe
-import           Data.String
-import           Data.Traversable          (for)
+import           Control.Monad.Trans.Maybe (MaybeT(..))
+import           Data.Char                 (isAlphaNum, isLower, isSpace,
+                                            isUpper, toUpper)
+import           Data.List                 (foldl', groupBy, intercalate, sort,
+                                            stripPrefix, isPrefixOf, find)
+import           Data.Maybe                (catMaybes)
 import           System.Directory          (doesDirectoryExist, doesFileExist,
                                             getDirectoryContents)
 import           System.Environment        (getArgs)
-import           System.Exit
 import           System.FilePath
-import           System.IO
-
-instance IsString ShowS where
-  fromString = showString
 
 data Task = Task
     { taskModule :: String
@@ -52,6 +47,7 @@ mkTaskModule src tasks = unlines
   , "{-# LANGUAGE DeriveGeneric #-}"
   , "{-# LANGUAGE DeriveAnyClass #-}"
   , "{-# LANGUAGE OverloadedStrings #-}"
+  , "{-# LANGUAGE RecordWildCards #-}"
   , ""
   , "module " ++ pathToModule src ++ " where"
   , ""
@@ -76,15 +72,37 @@ driver tasks = unlines $
 mkCommandSum :: [Task] -> String
 mkCommandSum [] = ""
 mkCommandSum tasks = "data Command = "
-    ++ intercalate "|" (map taskToSum tasks)
+    ++ intercalate " | " (map taskToSum tasks)
     ++ " deriving (Eq, Show, Read, Generic, ParseRecord)"
 
 taskToSum :: Task -> String
-taskToSum = taskName
+taskToSum task = taskName task ++ case taskArgs task of
+    Nothing -> ""
+    Just args -> stripArgs args
+
+stripArgs :: String -> String
+stripArgs =
+    (' ' :)
+    . (++ "}")
+    . dropWhile (/= '{')
+    . takeWhile (/= '}')
 
 mkCaseOf :: Task -> String
 mkCaseOf task = concat
-    [taskName task, " -> ", taskModule task, "Task.task"]
+    [ taskName task
+    , maybe "" (const "{..}") (taskArgs task)
+    , " -> "
+    , taskModule task
+    , "Task.task"
+    , case taskArgs task of
+        Nothing ->
+            ""
+        Just _ -> concat
+            [ " "
+            , taskModule task
+            , "Task.Args {..}"
+            ]
+    ]
 
 indent :: Int -> [String] -> [String]
 indent n = map (replicate n ' ' ++)
@@ -127,9 +145,8 @@ mkTask fileContent name mod_ = Task
 casify :: String -> String
 casify str = intercalate "_" $ groupBy (\a b -> isUpper a && isLower b) str
 
-
 findArgs :: String -> Maybe String
-findArgs file =  Nothing
+findArgs = find ("data Args" `isPrefixOf`) . decs
 
 decs :: String -> [String]
 decs = reverse . fmap (collapseSpace . concat . reverse) . foldl' go [] . lines
