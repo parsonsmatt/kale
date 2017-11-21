@@ -83,7 +83,7 @@ driver tasks = Driver $ unlines $
 newtype CommandSumType = CommandSumType { unCommandSumType :: String }
 
 mkCommandSum :: [Task] -> CommandSumType
-mkCommandSum [] = CommandSumType $ ""
+mkCommandSum [] = CommandSumType ""
 mkCommandSum tasks = CommandSumType $ "data Command = "
     ++ intercalate " | " (map (unTaskName . taskToSum) tasks)
     ++ " deriving (Eq, Show, Read, Generic, ParseRecord)"
@@ -91,7 +91,7 @@ mkCommandSum tasks = CommandSumType $ "data Command = "
 taskToSum :: Task -> TaskName
 taskToSum task = TaskName $ (unTaskName . taskName $ task) ++ case taskArgs task of
     Nothing -> ""
-    Just args -> stripArgs $ args
+    Just args -> stripArgs args
 
 stripArgs :: TaskArgs -> String
 stripArgs =
@@ -151,7 +151,7 @@ fileToTask dir file = runMaybeT $
 
 mkTask :: String -> String -> String -> Task
 mkTask fileContent name mod_ = Task
-    { taskModule = TaskModule $ mod_
+    { taskModule = TaskModule mod_
     , taskArgs   = TaskArgs <$> findArgs fileContent
     , taskName   = TaskName $ casify name
     }
@@ -209,4 +209,4 @@ importList :: [Task] -> ImportList
 importList = ImportList . unlines . map f
   where
     f :: Task -> String
-    f task = "import qualified " ++ (unTaskModule $ taskModule task) ++ "Task"
+    f task = "import qualified " ++ unTaskModule (taskModule task) ++ "Task"

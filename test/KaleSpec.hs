@@ -8,10 +8,10 @@ spec :: Spec
 spec = do
     describe "driver" $ do
         it "is empty on empty tasks" $
-            (unDriver $ driver []) `shouldBe` ""
+            unDriver (driver []) `shouldBe` ""
         it "has command sum" $
-            (unDriver $ driver [Task (TaskModule "Foo.Bar") Nothing (TaskName "Bar")])
-                `shouldBe` unlines 
+            unDriver (driver [Task (TaskModule "Foo.Bar") Nothing (TaskName "Bar")])
+                `shouldBe` unlines
                     [ "kaleMain :: IO ()"
                     , "kaleMain = do"
                     , "  cmd <- getRecord \"kale-discovery\""
