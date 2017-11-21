@@ -10,7 +10,7 @@ spec = do
         it "is empty on empty tasks" $
             unDriver (driver []) `shouldBe` ""
         it "has command sum" $
-            unDriver (driver [Task (TaskModule "Foo.Bar") Nothing (TaskName "Bar")])
+            unDriver (driver [Task (TaskModule "Foo.Bar") NoArgs (TaskName "Bar")])
                 `shouldBe` unlines
                     [ "kaleMain :: IO ()"
                     , "kaleMain = do"
@@ -61,7 +61,7 @@ spec = do
             unCommandSumType (mkCommandSum [task0, task1])
                 `shouldBe` concat
                     [ "data Command = Name { foo :: Int }"
-                    , " | Other_Name deriving (Eq, "
+                    , " | OtherName deriving (Eq, "
                     , "Show, Read, Generic, ParseRecord)"
                     ]
 
@@ -73,11 +73,11 @@ spec = do
         it "works without args" $ do
             mkCaseOf task1
                 `shouldBe`
-                    "Other_Name -> Module1.FooTask.task"
+                    "OtherName -> Module1.FooTask.task"
 
     describe "mkTask" $ do
         it "is Nothing for taskArgs when fileContent is empty" $
-            mkTask "" "OtherName" "Module1.Foo" `shouldBe` task1
+            mkTask (FileContent "") (TaskName "OtherName") (TaskModule "Module1.Foo") `shouldBe` task1
 
     describe "pathToModule" $ do
         it "parses directories and file extensions" $
@@ -97,8 +97,8 @@ spec = do
                 `shouldBe`
                     Just "data Args = Args { fooId :: Int , barId :: Int }"
 
-args0 :: String
-args0 = unlines
+args0 :: FileContent
+args0 = FileContent $ unlines
     [ "module ASdf where"
     , ""
     , "data Args"
@@ -152,7 +152,7 @@ decs4 = unlines
 
 
 task0 :: Task
-task0 = Task (TaskModule "Module.Foo") (TaskArgs <$> Just "data Args = Args { foo :: Int }") (TaskName "Name")
+task0 = Task (TaskModule "Module.Foo") (RecordArgs "data Args = Args { foo :: Int }") (TaskName "Name")
 
 task1 :: Task
-task1 = Task (TaskModule "Module1.Foo") (TaskArgs <$> Nothing) (TaskName "Other_Name")
+task1 = Task (TaskModule "Module1.Foo") NoArgs (TaskName "OtherName")

@@ -18,14 +18,14 @@ import           System.Directory          (doesDirectoryExist, doesFileExist,
 import           System.Environment        (getArgs)
 import           System.FilePath
 
-newtype TaskArgs = TaskArgs { unTaskArgs :: String} deriving (Eq, Show)
+data TaskArgs = NoArgs | PositionalArgs String | RecordArgs String deriving (Eq, Show)
 newtype TaskModule = TaskModule { unTaskModule :: String } deriving (Eq, Show)
 newtype TaskName = TaskName { unTaskName :: String } deriving (Eq, Show)
 
 data Task = Task
     { taskModule :: TaskModule
     -- ^ The name of the task module.
-    , taskArgs   :: Maybe TaskArgs
+    , taskArgs   :: TaskArgs
     -- ^ The arguments to provide to the task.
     , taskName   :: TaskName
     -- ^ The name of the task.
@@ -90,28 +90,31 @@ mkCommandSum tasks = CommandSumType $ "data Command = "
 
 taskToSum :: Task -> TaskName
 taskToSum task = TaskName $ (unTaskName . taskName $ task) ++ case taskArgs task of
-    Nothing -> ""
-    Just args -> stripArgs args
+    NoArgs -> ""
+    PositionalArgs args -> stripArgs args
+    RecordArgs args -> stripArgs args
 
-stripArgs :: TaskArgs -> String
+stripArgs :: String -> String
 stripArgs =
     (' ' :)
     . (++ "}")
     . dropWhile (/= '{')
     . takeWhile (/= '}')
-    . unTaskArgs
 
 mkCaseOf :: Task -> String
 mkCaseOf task = concat
     [ unTaskName . taskName $ task
-    , maybe "" (const "{..}") (taskArgs task)
+    , case taskArgs task of
+        NoArgs -> ""
+        _ -> "{..}"
+    --, maybe "" (const "{..}") (taskArgs task)
     , " -> "
     , unTaskModule . taskModule $ task
     , "Task.task"
     , case taskArgs task of
-        Nothing ->
+        NoArgs ->
             ""
-        Just _ -> concat
+        _ -> concat
             [ " "
             , unTaskModule . taskModule $ task
             , "Task.Args {..}"
@@ -139,8 +142,8 @@ fileToTask dir file = runMaybeT $
             name <- MaybeT . pure . stripSuffixes $ x
             guard (isValidModuleName name && all isValidModuleName xs)
             let fileName = dir </> file
-            moduleContents <- liftIO $ readFile fileName
-            pure (mkTask moduleContents name (intercalate "." (reverse (name : xs))))
+            moduleContents <- liftIO $ FileContent <$> readFile fileName
+            pure (mkTask moduleContents (mkTaskName name) (TaskModule $ intercalate "." (reverse (name : xs))))
   where
     stripSuffixes :: String -> Maybe String
     stripSuffixes x =
@@ -149,18 +152,31 @@ fileToTask dir file = runMaybeT $
     stripSuffix suffix str =
         reverse <$> stripPrefix (reverse suffix) (reverse str)
 
-mkTask :: String -> String -> String -> Task
+newtype FileContent = FileContent { unFileContent :: String }
+
+mkTask :: FileContent -> TaskName -> TaskModule -> Task
 mkTask fileContent name mod_ = Task
-    { taskModule = TaskModule mod_
-    , taskArgs   = TaskArgs <$> findArgs fileContent
-    , taskName   = TaskName $ casify name
+    { taskModule = mod_
+    , taskArgs   = mkTaskArgs fileContent
+    , taskName   = name
     }
+
+mkTaskArgs :: FileContent -> TaskArgs
+mkTaskArgs fileContent = case findArgs fileContent of
+  Nothing -> NoArgs
+  Just args ->
+    if '{' `elem` args
+    then PositionalArgs args
+    else RecordArgs args
+
+mkTaskName :: String -> TaskName
+mkTaskName = TaskName . casify
 
 casify :: String -> String
 casify str = intercalate "_" $ groupBy (\a b -> isUpper a && isLower b) str
 
-findArgs :: String -> Maybe String
-findArgs = find ("data Args" `isPrefixOf`) . decs
+findArgs :: FileContent -> Maybe String
+findArgs = find ("data Args" `isPrefixOf`) . decs . unFileContent
 
 decs :: String -> [String]
 decs = reverse . fmap (collapseSpace . concat . reverse) . foldl' go [] . lines
