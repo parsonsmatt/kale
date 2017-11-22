@@ -1,7 +1,6 @@
 module KaleSpec where
 
 import Test.Hspec
-import Data.Maybe (isJust)
 
 import Kale
 
@@ -19,8 +18,6 @@ spec = do
                     , "  case (cmd :: Command) of"
                     , "    Bar -> Foo.BarTask.task"
                     ]
-        beforeAll (fileToTask "./example/src/Lib/" "PosTask.hs") $ do
-            it "parses a task" $ \mtask -> mtask `shouldSatisfy` isJust
 
     describe "casify" $ do
         it "simple case works" $
