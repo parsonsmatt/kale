@@ -21,13 +21,13 @@ spec = do
 
     describe "casify" $ do
         it "simple case works" $
-            casify "HelloWorld" `shouldBe` "Hello_World"
+            casify "HelloWorld" `shouldBe` TaskName "Hello_World"
         it "acts strange with many caps letters" $
-            casify "HTTPWorker" `shouldBe` "H_T_T_P_Worker"
+            casify "HTTPWorker" `shouldBe` TaskName "H_T_T_P_Worker"
         -- the inputs to casify will always be module names, so the below should
         -- not happen
         it "acts strange with initial lowercase" $
-            casify "lowHigh" `shouldBe` "l_o_w_High"
+            casify "lowHigh" `shouldBe` TaskName "l_o_w_High"
 
     describe "decs" $ do
         it "roughly parses declarations" $ do
@@ -69,7 +69,7 @@ spec = do
         it "works with positional arguments" $ do
             taskToSum task2
                 `shouldBe`
-                    TaskName "Yes_Name Int (Maybe String)"
+                    "Yes_Name Int (Maybe String)"
 
     describe "mkCaseOf" $ do
         it "works with args" $ do
@@ -92,6 +92,23 @@ spec = do
             mkCaseMatch task1 `shouldBe` ""
         it "works on positional arguments" $ do
             mkCaseMatch task2 `shouldBe` "arg0 arg1"
+
+    describe "mkTaskArgs" $ do
+        it "successfully determines no arguments" $ do
+            mkTaskArgs (FileContent "module Foo where\n\ntask :: IO ()")
+                `shouldBe`
+                    NoArgs
+
+        it "successfully determines record args" $ do
+            mkTaskArgs (FileContent "data Args = Args { foo :: Int }")
+                `shouldBe`
+                    RecordArgs "{ foo :: Int }"
+
+        it "succeeds on positional args" $ do
+            mkTaskArgs (FileContent "data Args = Args Int String")
+                `shouldBe`
+                    PositionalArgs ["Int", "String"]
+
 
     describe "mkTask" $ do
         it "is Nothing for taskArgs when fileContent is empty" $
@@ -118,6 +135,10 @@ spec = do
             findArgs args1
                 `shouldBe`
                     Just "data Args = Args Int String"
+        it "works with deriving" $ do
+            findArgs args2
+                `shouldBe`
+                    Just "data Args = Args Int String deriving (Eq, Show)"
 
     describe "processPositional" $ do
         it "formats positional arguments" $ do
@@ -127,11 +148,35 @@ spec = do
         it "works with type constructors" $ do
             processPositional "data Args = Args (Maybe String) Int"
                 `shouldBe`
-                    PositionalArgs ["Maybe String", "Int"]
+                    PositionalArgs ["(Maybe String)", "Int"]
         it "is fine with deriving" $ do
             processPositional "data Args = Args (Maybe String) Int deriving Show"
                 `shouldBe`
-                    PositionalArgs ["Maybe String", "Int"]
+                    PositionalArgs ["(Maybe String)", "Int"]
+
+    describe "collectTopLevelParens" $ do
+        it "works on zero layers" $ do
+            collectTopLevelParens "hey foo bar"
+                `shouldBe`
+                    ["hey", "foo", "bar"]
+
+        it "works on two layers" $ do
+            collectTopLevelParens "hey (foo bar) baz"
+                `shouldBe`
+                    ["hey", "(foo bar)", "baz"]
+
+        it "works on three layers" $ do
+            collectTopLevelParens "hey (foo (bar baz)) yes"
+                `shouldBe`
+                    ["hey", "(foo (bar baz))", "yes"]
+
+    describe "isValidModuleName" $ do
+        it "must start with uppercase letter" $ do
+            isValidModuleName "Yes" `shouldBe` True
+        it "must not be empty" $ do
+            isValidModuleName "" `shouldBe` False
+
+
 
 args0 :: FileContent
 args0 = FileContent $ unlines
@@ -152,8 +197,8 @@ args1 = FileContent $ unlines
     , "  = Args Int String"
     ]
 
-args3 :: FileContent
-args3 = FileContent $ unlines
+args2 :: FileContent
+args2 = FileContent $ unlines
     [ "module FooBar where"
     , "data Args"
     , " = Args Int String"
@@ -193,16 +238,6 @@ decs3 = unlines
     , "}"
     ]
 
-decs4 :: String
-decs4 = unlines
-    [ "module Wat where"
-    , "data Args = Args"
-    , "  { fooName :: String"
-    , "  , fooAge  :: Int"
-    , "  }"
-    ]
-
-
 task0 :: Task
 task0 = Task (TaskModule "Module.Foo") (stripArgs "data Args = Args { foo :: Int }") (TaskName "Name")
 
@@ -212,17 +247,5 @@ task1 = Task (TaskModule "Module1.Foo") NoArgs (TaskName "Other_Name")
 task2 :: Task
 task2 = Task
     (TaskModule "Module1.Bar")
-    (PositionalArgs ["Int", "Maybe String"])
+    (PositionalArgs ["Int", "(Maybe String)"])
     (TaskName "Yes_Name")
-
-posFile :: FileContent
-posFile = FileContent $ unlines
-    [ "module Lib.PosTask where"
-    , ""
-    , "data Args = Args Int String"
-    , ""
-    , "task :: Args -> IO ()"
-    , "task (Args i s) = do"
-    , "    print i"
-    , "    putStrLn s"
-    ]

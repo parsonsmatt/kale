@@ -15,7 +15,6 @@ import           Data.List                 (find, foldl', groupBy, intercalate,
 import           Data.Maybe                (catMaybes, fromMaybe)
 import           System.Directory          (doesDirectoryExist, doesFileExist,
                                             getDirectoryContents)
-import           System.Environment        (getArgs)
 import           System.FilePath
 
 -- | A task can have three sorts of arguments.
@@ -50,18 +49,6 @@ data Task = Task
     -- ^ The name of the task.
     }
     deriving (Eq, Show)
-
--- | 'runKale' is the entry point of the Kale task discovery tool.
-runKale :: IO ()
-runKale = do
-    kaleArgs <- getArgs
-    case kaleArgs of
-        src : _ : dest : _ -> do
-            tasks <- findTasks src
-            writeTaskModule dest (mkTaskModule src tasks)
-        _ -> do
-            putStrLn usage
-            print kaleArgs
 
 newtype TaskModuleContents = TaskModuleContents { unTaskModuleContents :: String }
 
@@ -114,21 +101,16 @@ mkCommandSum :: [Task] -- ^ The list of 'Task's from which to create commands.
              -> CommandSumType
 mkCommandSum [] = CommandSumType ""
 mkCommandSum tasks = CommandSumType $ "data Command = "
-    ++ intercalate " | " (map (unTaskName . taskToSum) tasks)
+    ++ intercalate " | " (map taskToSum tasks)
     ++ " deriving (Eq, Show, Read, Generic, ParseRecord)"
 
 -- | Create a 'TaskName' from the given 'Task'.
 taskToSum :: Task -- ^ The 'Task'
-          -> TaskName
-taskToSum task = TaskName $ (unTaskName . taskName $ task) ++ case taskArgs task of
+          -> String
+taskToSum task = (unTaskName . taskName $ task) ++ case taskArgs task of
     NoArgs              -> ""
-    PositionalArgs args -> " " ++ unwords (fmap parenWrap args)
-    RecordArgs args     -> args
-
-parenWrap :: String -> String
-parenWrap str
-    | length (words str) > 1 = concat ["(", str, ")"]
-    | otherwise = str
+    PositionalArgs args -> " " ++ unwords args
+    RecordArgs args     -> " " ++ args
 
 -- | Strips all but the record fields from a data type.
 --
@@ -137,7 +119,7 @@ parenWrap str
 stripArgs :: String -> TaskArgs
 stripArgs =
     RecordArgs
-    . (' ' :)
+    -- . (' ' :)
     . (++ "}")
     . dropWhile (/= '{')
     . takeWhile (/= '}')
@@ -187,10 +169,6 @@ indent :: Int      -- ^ The number of spaces to indent.
        -> [String]
 indent n = map (replicate n ' ' ++)
 
--- | Usage string.
-usage :: String
-usage = "Kale doesn't take any arguments."
-
 -- | Returns the 'Task's found at the given FilePath.
 findTasks :: FilePath  -- ^ The path at which to search for 'Task's.
           -> IO [Task]
@@ -212,7 +190,7 @@ fileToTask dir file = runMaybeT $
             guard (isValidModuleName name && all isValidModuleName xs)
             let fileName = dir </> file
             moduleContents <- liftIO $ FileContent <$> readFile fileName
-            pure (mkTask moduleContents (mkTaskName name) (TaskModule $ intercalate "." (reverse (name : xs))))
+            pure (mkTask moduleContents (casify name) (TaskModule $ intercalate "." (reverse (name : xs))))
   where
     stripSuffixes :: String -> Maybe String
     stripSuffixes x =
@@ -235,8 +213,8 @@ mkTask fileContent name mod_ = Task
     }
 
 -- | Convert a String in camel case to snake case.
-casify :: String -> String
-casify str = intercalate "_" $ groupBy (\a b -> isUpper a && isLower b) str
+casify :: String -> TaskName
+casify str = TaskName . intercalate "_" $ groupBy (\a b -> isUpper a && isLower b) str
 
 -- | Create 'TaskArgs' from the given task module contents.
 mkTaskArgs :: FileContent -> TaskArgs
@@ -247,10 +225,6 @@ mkTaskArgs fileContent = case findArgs fileContent of
     if '{' `elem` args
     then stripArgs args
     else processPositional args
-
--- | Create a 'TaskName' from the given string.
-mkTaskName :: String -> TaskName
-mkTaskName = TaskName . casify
 
 processPositional :: String -> TaskArgs
 processPositional str =
@@ -266,8 +240,8 @@ collectTopLevelParens :: String -> [String]
 collectTopLevelParens = snd . foldr go (0 :: Int, [])
   where
     go '(' (0, acc) = (1, [] : acc)
-    go '(' (p, acc) = (p + 1, acc)
-    go ')' (p, acc) = (p - 1, acc)
+    go '(' (p, acc) = (p + 1, '(' `consFirst` acc)
+    go ')' (p, acc) = (p - 1, ')' `consFirst` acc)
     go c (0, acc)
         | isSpace c = (0, [] : acc)
         | otherwise = (0, consFirst c acc)
