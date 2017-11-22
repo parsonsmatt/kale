@@ -18,9 +18,21 @@ import           System.Directory          (doesDirectoryExist, doesFileExist,
 import           System.Environment        (getArgs)
 import           System.FilePath
 
-data TaskArgs = NoArgs | PositionalArgs String | RecordArgs String deriving (Eq, Show)
-newtype TaskModule = TaskModule { unTaskModule :: String } deriving (Eq, Show)
-newtype TaskName = TaskName { unTaskName :: String } deriving (Eq, Show)
+data TaskArgs
+    = NoArgs
+    | PositionalArgs [String]
+    | RecordArgs String
+    deriving (Eq, Show)
+
+newtype TaskModule
+    = TaskModule
+    { unTaskModule :: String
+    } deriving (Eq, Show)
+
+newtype TaskName
+    = TaskName
+    { unTaskName :: String
+    } deriving (Eq, Show)
 
 data Task = Task
     { taskModule :: TaskModule
@@ -91,12 +103,13 @@ mkCommandSum tasks = CommandSumType $ "data Command = "
 taskToSum :: Task -> TaskName
 taskToSum task = TaskName $ (unTaskName . taskName $ task) ++ case taskArgs task of
     NoArgs -> ""
-    PositionalArgs args -> stripArgs args
-    RecordArgs args -> stripArgs args
+    PositionalArgs args -> unwords args
+    RecordArgs args -> args
 
-stripArgs :: String -> String
+stripArgs :: String -> TaskArgs
 stripArgs =
-    (' ' :)
+    RecordArgs
+    . (' ' :)
     . (++ "}")
     . dropWhile (/= '{')
     . takeWhile (/= '}')
@@ -106,7 +119,9 @@ mkCaseOf task = concat
     [ unTaskName . taskName $ task
     , case taskArgs task of
         NoArgs -> ""
-        _ -> "{..}"
+        RecordArgs _ -> "{..}"
+        PositionalArgs _ -> error "not implemented yet"
+
     --, maybe "" (const "{..}") (taskArgs task)
     , " -> "
     , unTaskModule . taskModule $ task
@@ -163,14 +178,18 @@ mkTask fileContent name mod_ = Task
 
 mkTaskArgs :: FileContent -> TaskArgs
 mkTaskArgs fileContent = case findArgs fileContent of
-  Nothing -> NoArgs
+  Nothing ->
+      NoArgs
   Just args ->
     if '{' `elem` args
-    then PositionalArgs args
-    else RecordArgs args
+    then processPositional args
+    else stripArgs args
 
 mkTaskName :: String -> TaskName
 mkTaskName = TaskName . casify
+
+processPositional :: String -> TaskArgs
+processPositional _str = PositionalArgs []
 
 casify :: String -> String
 casify str = intercalate "_" $ groupBy (\a b -> isUpper a && isLower b) str

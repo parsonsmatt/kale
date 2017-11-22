@@ -92,10 +92,24 @@ spec = do
                         ]
 
     describe "findArgs" $ do
-        it "correctly finds arguments" $ do
+        it "finds record arguments" $ do
             findArgs args0
                 `shouldBe`
                     Just "data Args = Args { fooId :: Int , barId :: Int }"
+        it "finds positional arguments" $ do
+            findArgs args1
+                `shouldBe`
+                    Just "data Args = Args Int String"
+
+    describe "processPositional" $ do
+        it "formats positional arguments" $ do
+            processPositional "data Args = Args Int String"
+                `shouldBe`
+                    PositionalArgs ["Int", "String"]
+        it "works with type constructors" $ do
+            processPositional "data Args = Args (Maybe String) Int"
+                `shouldBe`
+                    PositionalArgs ["Maybe String", "Int"]
 
 args0 :: FileContent
 args0 = FileContent $ unlines
@@ -106,6 +120,14 @@ args0 = FileContent $ unlines
     , "  { fooId :: Int"
     , "  , barId :: Int"
     , "  }"
+    ]
+
+args1 :: FileContent
+args1 = FileContent $ unlines
+    [ "module ASdf where"
+    , ""
+    , "data Args"
+    , "  = Args Int String"
     ]
 
 decs0 :: String
@@ -152,7 +174,7 @@ decs4 = unlines
 
 
 task0 :: Task
-task0 = Task (TaskModule "Module.Foo") (RecordArgs "data Args = Args { foo :: Int }") (TaskName "Name")
+task0 = Task (TaskModule "Module.Foo") (stripArgs "data Args = Args { foo :: Int }") (TaskName "Name")
 
 task1 :: Task
 task1 = Task (TaskModule "Module1.Foo") NoArgs (TaskName "Other_Name")
