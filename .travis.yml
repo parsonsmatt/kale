@@ -115,6 +115,7 @@ before_install:
   then
     echo 'jobs: $ncpus' >> $HOME/.cabal/config
   fi
+- stack install hpc-coveralls
 
 install:
 - echo "$(ghc --version) [$(ghc --print-project-git-commit-id 2> /dev/null || echo '?')]"
@@ -170,3 +171,6 @@ script:
       ;;
   esac
   set +ex
+
+after_script:
+  - hpc-coveralls kale-test
