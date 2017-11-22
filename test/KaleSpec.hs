@@ -8,9 +8,9 @@ spec :: Spec
 spec = do
     describe "driver" $ do
         it "is empty on empty tasks" $
-            driver [] `shouldBe` ""
+            unDriver (driver []) `shouldBe` ""
         it "has command sum" $
-            driver [Task "Foo.Bar" Nothing "Bar"]
+            unDriver (driver [Task (TaskModule "Foo.Bar") NoArgs (TaskName "Bar")])
                 `shouldBe` unlines
                     [ "kaleMain :: IO ()"
                     , "kaleMain = do"
@@ -56,9 +56,9 @@ spec = do
 
     describe "mkCommandSum" $ do
         it "is empty on empty task lists" $
-            mkCommandSum [] `shouldBe` ""
+            unCommandSumType (mkCommandSum []) `shouldBe` ""
         it "lists tasktnames properly" $
-            mkCommandSum [task0, task1]
+            unCommandSumType (mkCommandSum [task0, task1])
                 `shouldBe` concat
                     [ "data Command = Name { foo :: Int }"
                     , " | Other_Name deriving (Eq, "
@@ -77,7 +77,7 @@ spec = do
 
     describe "mkTask" $ do
         it "is Nothing for taskArgs when fileContent is empty" $
-            mkTask "" "OtherName" "Module1.Foo" `shouldBe` task1
+            mkTask (FileContent "") (TaskName "Other_Name") (TaskModule "Module1.Foo") `shouldBe` task1
 
     describe "pathToModule" $ do
         it "parses directories and file extensions" $
@@ -85,7 +85,7 @@ spec = do
 
     describe "importList" $ do
         it "pulls out taskModules and splits into newlines" $
-            importList [task0, task1] `shouldBe`
+            unImportList (importList [task0, task1]) `shouldBe`
                 unlines [
                         "import qualified Module.FooTask",
                         "import qualified Module1.FooTask"
@@ -97,8 +97,8 @@ spec = do
                 `shouldBe`
                     Just "data Args = Args { fooId :: Int , barId :: Int }"
 
-args0 :: String
-args0 = unlines
+args0 :: FileContent
+args0 = FileContent $ unlines
     [ "module ASdf where"
     , ""
     , "data Args"
@@ -152,7 +152,7 @@ decs4 = unlines
 
 
 task0 :: Task
-task0 = Task "Module.Foo" (Just "data Args = Args { foo :: Int }") "Name"
+task0 = Task (TaskModule "Module.Foo") (RecordArgs "data Args = Args { foo :: Int }") (TaskName "Name")
 
 task1 :: Task
-task1 = Task "Module1.Foo" Nothing "Other_Name"
+task1 = Task (TaskModule "Module1.Foo") NoArgs (TaskName "Other_Name")

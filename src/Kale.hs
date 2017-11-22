@@ -18,12 +18,16 @@ import           System.Directory          (doesDirectoryExist, doesFileExist,
 import           System.Environment        (getArgs)
 import           System.FilePath
 
+data TaskArgs = NoArgs | PositionalArgs String | RecordArgs String deriving (Eq, Show)
+newtype TaskModule = TaskModule { unTaskModule :: String } deriving (Eq, Show)
+newtype TaskName = TaskName { unTaskName :: String } deriving (Eq, Show)
+
 data Task = Task
-    { taskModule :: String
+    { taskModule :: TaskModule
     -- ^ The name of the task module.
-    , taskArgs   :: Maybe String
+    , taskArgs   :: TaskArgs
     -- ^ The arguments to provide to the task.
-    , taskName   :: String
+    , taskName   :: TaskName
     -- ^ The name of the task.
     }
     deriving (Eq, Show)
@@ -35,13 +39,18 @@ runKale = do
     case kaleArgs of
         src : _ : dest : _ -> do
             tasks <- findTasks src
-            writeFile dest (mkTaskModule src tasks)
+            writeTaskModule dest (mkTaskModule src tasks)
         _ -> do
             putStrLn usage
             print kaleArgs
 
-mkTaskModule :: FilePath -> [Task] -> String
-mkTaskModule src tasks = unlines
+newtype TaskModuleContents = TaskModuleContents { unTaskModuleContents :: String }
+
+writeTaskModule :: FilePath -> TaskModuleContents -> IO ()
+writeTaskModule dest taskModuleContents = writeFile dest (unTaskModuleContents taskModuleContents)
+
+mkTaskModule :: FilePath -> [Task] -> TaskModuleContents
+mkTaskModule src tasks = TaskModuleContents $ unlines
   [ "{-# LINE 1 " ++ show src ++ " #-}"
   , "{-# OPTIONS_GHC -fno-warn-warnings-deprecations #-}\n"
   , "{-# LANGUAGE DeriveGeneric #-}"
@@ -52,16 +61,18 @@ mkTaskModule src tasks = unlines
   , "module " ++ pathToModule src ++ " where"
   , ""
   , "import Kale.Discover"
-  , importList tasks
+  , unImportList $ importList tasks
   , ""
-  , mkCommandSum tasks
+  , unCommandSumType $ mkCommandSum tasks
   , ""
-  , driver tasks
+  , unDriver $ driver tasks
   ]
 
-driver :: [Task] -> String
-driver [] = ""
-driver tasks = unlines $
+newtype Driver = Driver { unDriver :: String }
+
+driver :: [Task] -> Driver
+driver [] = Driver ""
+driver tasks = Driver $ unlines $
     [ "kaleMain :: IO ()"
     , "kaleMain = do"
     ] ++ indent 2
@@ -69,16 +80,19 @@ driver tasks = unlines $
     , "case (cmd :: Command) of"
     ] ++ indent 4 (map mkCaseOf tasks)
 
-mkCommandSum :: [Task] -> String
-mkCommandSum [] = ""
-mkCommandSum tasks = "data Command = "
-    ++ intercalate " | " (map taskToSum tasks)
+newtype CommandSumType = CommandSumType { unCommandSumType :: String }
+
+mkCommandSum :: [Task] -> CommandSumType
+mkCommandSum [] = CommandSumType ""
+mkCommandSum tasks = CommandSumType $ "data Command = "
+    ++ intercalate " | " (map (unTaskName . taskToSum) tasks)
     ++ " deriving (Eq, Show, Read, Generic, ParseRecord)"
 
-taskToSum :: Task -> String
-taskToSum task = taskName task ++ case taskArgs task of
-    Nothing -> ""
-    Just args -> stripArgs args
+taskToSum :: Task -> TaskName
+taskToSum task = TaskName $ (unTaskName . taskName $ task) ++ case taskArgs task of
+    NoArgs -> ""
+    PositionalArgs args -> stripArgs args
+    RecordArgs args -> stripArgs args
 
 stripArgs :: String -> String
 stripArgs =
@@ -89,17 +103,20 @@ stripArgs =
 
 mkCaseOf :: Task -> String
 mkCaseOf task = concat
-    [ taskName task
-    , maybe "" (const "{..}") (taskArgs task)
+    [ unTaskName . taskName $ task
+    , case taskArgs task of
+        NoArgs -> ""
+        _ -> "{..}"
+    --, maybe "" (const "{..}") (taskArgs task)
     , " -> "
-    , taskModule task
+    , unTaskModule . taskModule $ task
     , "Task.task"
     , case taskArgs task of
-        Nothing ->
+        NoArgs ->
             ""
-        Just _ -> concat
+        _ -> concat
             [ " "
-            , taskModule task
+            , unTaskModule . taskModule $ task
             , "Task.Args {..}"
             ]
     ]
@@ -125,8 +142,8 @@ fileToTask dir file = runMaybeT $
             name <- MaybeT . pure . stripSuffixes $ x
             guard (isValidModuleName name && all isValidModuleName xs)
             let fileName = dir </> file
-            moduleContents <- liftIO $ readFile fileName
-            pure (mkTask moduleContents name (intercalate "." (reverse (name : xs))))
+            moduleContents <- liftIO $ FileContent <$> readFile fileName
+            pure (mkTask moduleContents (mkTaskName name) (TaskModule $ intercalate "." (reverse (name : xs))))
   where
     stripSuffixes :: String -> Maybe String
     stripSuffixes x =
@@ -135,18 +152,31 @@ fileToTask dir file = runMaybeT $
     stripSuffix suffix str =
         reverse <$> stripPrefix (reverse suffix) (reverse str)
 
-mkTask :: String -> String -> String -> Task
+newtype FileContent = FileContent { unFileContent :: String }
+
+mkTask :: FileContent -> TaskName -> TaskModule -> Task
 mkTask fileContent name mod_ = Task
     { taskModule = mod_
-    , taskArgs   = findArgs fileContent
-    , taskName   = casify name
+    , taskArgs   = mkTaskArgs fileContent
+    , taskName   = name
     }
+
+mkTaskArgs :: FileContent -> TaskArgs
+mkTaskArgs fileContent = case findArgs fileContent of
+  Nothing -> NoArgs
+  Just args ->
+    if '{' `elem` args
+    then PositionalArgs args
+    else RecordArgs args
+
+mkTaskName :: String -> TaskName
+mkTaskName = TaskName . casify
 
 casify :: String -> String
 casify str = intercalate "_" $ groupBy (\a b -> isUpper a && isLower b) str
 
-findArgs :: String -> Maybe String
-findArgs = find ("data Args" `isPrefixOf`) . decs
+findArgs :: FileContent -> Maybe String
+findArgs = find ("data Args" `isPrefixOf`) . decs . unFileContent
 
 decs :: String -> [String]
 decs = reverse . fmap (collapseSpace . concat . reverse) . foldl' go [] . lines
@@ -188,10 +218,11 @@ pathToModule f = toUpper m:ms
     fileName = last $ splitDirectories f
     m:ms = takeWhile (/='.') fileName
 
+newtype ImportList = ImportList { unImportList :: String } deriving (Show)
 
 -- | Generate imports for a list of specs.
-importList :: [Task] -> String
-importList = unlines . map f
+importList :: [Task] -> ImportList
+importList = ImportList . unlines . map f
   where
     f :: Task -> String
-    f task = "import qualified " ++ taskModule task ++ "Task"
+    f task = "import qualified " ++ unTaskModule (taskModule task) ++ "Task"
