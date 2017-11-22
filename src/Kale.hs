@@ -109,7 +109,7 @@ taskToSum :: Task -- ^ The 'Task'
           -> String
 taskToSum task = (unTaskName . taskName $ task) ++ case taskArgs task of
     NoArgs              -> ""
-    PositionalArgs args -> " " ++ unwords (args)
+    PositionalArgs args -> " " ++ unwords args
     RecordArgs args     -> " " ++ args
 
 parenWrap :: String -> String
@@ -173,10 +173,6 @@ indent :: Int      -- ^ The number of spaces to indent.
        -> [String] -- ^ The Strings to indent.
        -> [String]
 indent n = map (replicate n ' ' ++)
-
--- | Usage string.
-usage :: String
-usage = "Kale doesn't take any arguments."
 
 -- | Returns the 'Task's found at the given FilePath.
 findTasks :: FilePath  -- ^ The path at which to search for 'Task's.

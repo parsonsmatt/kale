@@ -12,5 +12,5 @@ main = do
             tasks <- findTasks src
             writeTaskModule dest (mkTaskModule src tasks)
         _ -> do
-            putStrLn usage
+            putStrLn "Kale doesn't take any arguments."
             print kaleArgs

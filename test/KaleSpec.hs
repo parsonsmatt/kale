@@ -166,6 +166,13 @@ spec = do
                 `shouldBe`
                     ["hey", "(foo (bar baz))", "yes"]
 
+    describe "isValidModuleName" $ do
+        it "must start with uppercase letter" $ do
+            isValidModuleName "Yes" `shouldBe` True
+        it "must not be empty" $ do
+            isValidModuleName "" `shouldBe` False
+
+
 
 args0 :: FileContent
 args0 = FileContent $ unlines
