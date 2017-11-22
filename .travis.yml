@@ -166,11 +166,9 @@ script:
         cabal configure --enable-tests --enable-coverage
         cabal build
         cabal test
+        hpc-coveralls kale-test
         cd $ORIGDIR
       done
       ;;
   esac
   set +ex
-
-after_script:
-  - hpc-coveralls kale-test
