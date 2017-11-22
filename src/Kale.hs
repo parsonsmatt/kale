@@ -18,10 +18,16 @@ import           System.Directory          (doesDirectoryExist, doesFileExist,
 import           System.Environment        (getArgs)
 import           System.FilePath
 
+-- | A task can have three sorts of arguments.
 data TaskArgs
     = NoArgs
+    -- ^ If the task has no arguments, this is the constructor that we use.
     | PositionalArgs [String]
+    -- ^ Positional arguments store a list of types, with one entry per
+    -- argument.
     | RecordArgs String
+    -- ^ Record arguments are stored as a whole string with no attempt to
+    -- parse the types out of them.
     deriving (Eq, Show)
 
 newtype TaskModule
