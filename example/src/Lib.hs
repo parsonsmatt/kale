@@ -1,1 +1,1 @@
-{-# OPTIONS_GHC -F -pgmF kale #-}
+{-# OPTIONS_GHC -F -pgmF kale-discover #-}
