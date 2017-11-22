@@ -110,6 +110,10 @@ spec = do
             processPositional "data Args = Args (Maybe String) Int"
                 `shouldBe`
                     PositionalArgs ["Maybe String", "Int"]
+        it "is fine with deriving" $ do
+            processPositional "data Args = Args (Maybe String) Int deriving Show"
+                `shouldBe`
+                    PositionalArgs ["Maybe String", "Int"]
 
 args0 :: FileContent
 args0 = FileContent $ unlines
@@ -128,6 +132,14 @@ args1 = FileContent $ unlines
     , ""
     , "data Args"
     , "  = Args Int String"
+    ]
+
+args3 :: FileContent
+args3 = FileContent $ unlines
+    [ "module FooBar where"
+    , "data Args"
+    , " = Args Int String"
+    , " deriving (Eq, Show)"
     ]
 
 decs0 :: String

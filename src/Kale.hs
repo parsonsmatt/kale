@@ -12,7 +12,7 @@ import           Data.Char                 (isAlphaNum, isLower, isSpace,
                                             isUpper, toUpper)
 import           Data.List                 (foldl', groupBy, intercalate, sort,
                                             stripPrefix, isPrefixOf, find)
-import           Data.Maybe                (catMaybes)
+import           Data.Maybe                (catMaybes, fromMaybe)
 import           System.Directory          (doesDirectoryExist, doesFileExist,
                                             getDirectoryContents)
 import           System.Environment        (getArgs)
@@ -189,7 +189,26 @@ mkTaskName :: String -> TaskName
 mkTaskName = TaskName . casify
 
 processPositional :: String -> TaskArgs
-processPositional _str = PositionalArgs []
+processPositional str =
+    PositionalArgs
+    . takeWhile (/= "deriving")
+    . collectTopLevelParens
+    . dropWhile isSpace
+    . fromMaybe (error "The Args type must have a single constructor named Args")
+    . stripPrefix "data Args = Args"
+    $ collapseSpace str
+
+collectTopLevelParens :: String -> [String]
+collectTopLevelParens = snd . foldr go (0 :: Int, [])
+  where
+    go '(' (0, acc) = (1, [] : acc)
+    go '(' (p, acc) = (p + 1, acc)
+    go ')' (p, acc) = (p - 1, acc)
+    go c (0, acc)
+        | isSpace c = (0, [] : acc)
+        | otherwise = (0, consFirst c acc)
+    go c (p, acc) = (p, consFirst c acc)
+
 
 casify :: String -> String
 casify str = intercalate "_" $ groupBy (\a b -> isUpper a && isLower b) str
@@ -206,8 +225,10 @@ decs = reverse . fmap (collapseSpace . concat . reverse) . foldl' go [] . lines
         | otherwise =
             [line] : acc
     go acc [] = acc
-    consFirst a []     = [[a]]
-    consFirst a (x:xs) = (a : x) : xs
+
+consFirst :: a -> [[a]] -> [[a]]
+consFirst a []     = [[a]]
+consFirst a (x:xs) = (a : x) : xs
 
 collapseSpace :: String -> String
 collapseSpace = unwords . words
