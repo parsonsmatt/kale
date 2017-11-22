@@ -7,11 +7,11 @@ module Kale where
 import           Control.Applicative
 import           Control.Monad
 import           Control.Monad.IO.Class
-import           Control.Monad.Trans.Maybe (MaybeT(..))
+import           Control.Monad.Trans.Maybe (MaybeT (..))
 import           Data.Char                 (isAlphaNum, isLower, isSpace,
                                             isUpper, toUpper)
-import           Data.List                 (foldl', groupBy, intercalate, sort,
-                                            stripPrefix, isPrefixOf, find)
+import           Data.List                 (find, foldl', groupBy, intercalate,
+                                            isPrefixOf, sort, stripPrefix)
 import           Data.Maybe                (catMaybes, fromMaybe)
 import           System.Directory          (doesDirectoryExist, doesFileExist,
                                             getDirectoryContents)
@@ -102,9 +102,14 @@ mkCommandSum tasks = CommandSumType $ "data Command = "
 
 taskToSum :: Task -> TaskName
 taskToSum task = TaskName $ (unTaskName . taskName $ task) ++ case taskArgs task of
-    NoArgs -> ""
-    PositionalArgs args -> unwords args
-    RecordArgs args -> args
+    NoArgs              -> ""
+    PositionalArgs args -> " " ++ unwords (fmap parenWrap args)
+    RecordArgs args     -> args
+
+parenWrap :: String -> String
+parenWrap str
+    | length (words str) > 1 = concat ["(", str, ")"]
+    | otherwise = str
 
 stripArgs :: String -> TaskArgs
 stripArgs =
@@ -115,26 +120,42 @@ stripArgs =
     . takeWhile (/= '}')
 
 mkCaseOf :: Task -> String
-mkCaseOf task = concat
-    [ unTaskName . taskName $ task
-    , case taskArgs task of
-        NoArgs -> ""
-        RecordArgs _ -> "{..}"
-        PositionalArgs _ -> error "not implemented yet"
+mkCaseOf task = unwords . filter (not . null) $
+    [ unTaskName (taskName task)
+    , mkCaseMatch task
+    , "->"
+    , unTaskModule (taskModule task) ++ "Task.task"
+    , mkCaseBranch task
+    ]
 
-    --, maybe "" (const "{..}") (taskArgs task)
-    , " -> "
-    , unTaskModule . taskModule $ task
-    , "Task.task"
-    , case taskArgs task of
+mkCaseBranch :: Task -> String
+mkCaseBranch task =
+    case taskArgs task of
         NoArgs ->
             ""
-        _ -> concat
-            [ " "
-            , unTaskModule . taskModule $ task
-            , "Task.Args {..}"
-            ]
-    ]
+        RecordArgs _ ->
+            (unTaskModule . taskModule $ task) ++ "Task.Args {..}"
+
+        PositionalArgs args ->
+            concat
+                [ "("
+                , unTaskModule . taskModule $ task
+                , "Task.Args "
+                , mkArgsList args
+                , ")"
+                ]
+
+mkCaseMatch :: Task -> String
+mkCaseMatch task =
+    case taskArgs task of
+        NoArgs -> ""
+        RecordArgs _ ->
+            "{..}"
+        PositionalArgs args ->
+            mkArgsList args
+
+mkArgsList :: [String] -> String
+mkArgsList = unwords . zipWith3 (\a i _ -> a ++ show i) (repeat "arg") [0 :: Int ..]
 
 indent :: Int -> [String] -> [String]
 indent n = map (replicate n ' ' ++)
@@ -182,8 +203,8 @@ mkTaskArgs fileContent = case findArgs fileContent of
       NoArgs
   Just args ->
     if '{' `elem` args
-    then processPositional args
-    else stripArgs args
+    then stripArgs args
+    else processPositional args
 
 mkTaskName :: String -> TaskName
 mkTaskName = TaskName . casify
@@ -208,7 +229,6 @@ collectTopLevelParens = snd . foldr go (0 :: Int, [])
         | isSpace c = (0, [] : acc)
         | otherwise = (0, consFirst c acc)
     go c (p, acc) = (p, consFirst c acc)
-
 
 casify :: String -> String
 casify str = intercalate "_" $ groupBy (\a b -> isUpper a && isLower b) str
