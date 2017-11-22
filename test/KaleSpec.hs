@@ -61,7 +61,7 @@ spec = do
             unCommandSumType (mkCommandSum [task0, task1])
                 `shouldBe` concat
                     [ "data Command = Name { foo :: Int }"
-                    , " | OtherName deriving (Eq, "
+                    , " | Other_Name deriving (Eq, "
                     , "Show, Read, Generic, ParseRecord)"
                     ]
 
@@ -73,11 +73,11 @@ spec = do
         it "works without args" $ do
             mkCaseOf task1
                 `shouldBe`
-                    "OtherName -> Module1.FooTask.task"
+                    "Other_Name -> Module1.FooTask.task"
 
     describe "mkTask" $ do
         it "is Nothing for taskArgs when fileContent is empty" $
-            mkTask (FileContent "") (TaskName "OtherName") (TaskModule "Module1.Foo") `shouldBe` task1
+            mkTask (FileContent "") (TaskName "Other_Name") (TaskModule "Module1.Foo") `shouldBe` task1
 
     describe "pathToModule" $ do
         it "parses directories and file extensions" $
@@ -155,4 +155,4 @@ task0 :: Task
 task0 = Task (TaskModule "Module.Foo") (RecordArgs "data Args = Args { foo :: Int }") (TaskName "Name")
 
 task1 :: Task
-task1 = Task (TaskModule "Module1.Foo") NoArgs (TaskName "OtherName")
+task1 = Task (TaskModule "Module1.Foo") NoArgs (TaskName "Other_Name")
