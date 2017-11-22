@@ -69,7 +69,7 @@ spec = do
         it "works with positional arguments" $ do
             taskToSum task2
                 `shouldBe`
-                    TaskName "Yes_Name Int (Maybe String)"
+                    "Yes_Name Int (Maybe String)"
 
     describe "mkCaseOf" $ do
         it "works with args" $ do
@@ -92,6 +92,23 @@ spec = do
             mkCaseMatch task1 `shouldBe` ""
         it "works on positional arguments" $ do
             mkCaseMatch task2 `shouldBe` "arg0 arg1"
+
+    describe "mkTaskArgs" $ do
+        it "successfully determines no arguments" $ do
+            mkTaskArgs (FileContent "module Foo where\n\ntask :: IO ()")
+                `shouldBe`
+                    NoArgs
+
+        it "successfully determines record args" $ do
+            mkTaskArgs (FileContent "data Args = Args { foo :: Int }")
+                `shouldBe`
+                    RecordArgs "{ foo :: Int }"
+
+        it "succeeds on positional args" $ do
+            mkTaskArgs (FileContent "data Args = Args Int String")
+                `shouldBe`
+                    PositionalArgs ["Int", "String"]
+
 
     describe "mkTask" $ do
         it "is Nothing for taskArgs when fileContent is empty" $
@@ -127,11 +144,28 @@ spec = do
         it "works with type constructors" $ do
             processPositional "data Args = Args (Maybe String) Int"
                 `shouldBe`
-                    PositionalArgs ["Maybe String", "Int"]
+                    PositionalArgs ["(Maybe String)", "Int"]
         it "is fine with deriving" $ do
             processPositional "data Args = Args (Maybe String) Int deriving Show"
                 `shouldBe`
-                    PositionalArgs ["Maybe String", "Int"]
+                    PositionalArgs ["(Maybe String)", "Int"]
+
+    describe "collectTopLevelParens" $ do
+        it "works on zero layers" $ do
+            collectTopLevelParens "hey foo bar"
+                `shouldBe`
+                    ["hey", "foo", "bar"]
+
+        it "works on two layers" $ do
+            collectTopLevelParens "hey (foo bar) baz"
+                `shouldBe`
+                    ["hey", "(foo bar)", "baz"]
+
+        it "works on three layers" $ do
+            collectTopLevelParens "hey (foo (bar baz)) yes"
+                `shouldBe`
+                    ["hey", "(foo (bar baz))", "yes"]
+
 
 args0 :: FileContent
 args0 = FileContent $ unlines
@@ -212,7 +246,7 @@ task1 = Task (TaskModule "Module1.Foo") NoArgs (TaskName "Other_Name")
 task2 :: Task
 task2 = Task
     (TaskModule "Module1.Bar")
-    (PositionalArgs ["Int", "Maybe String"])
+    (PositionalArgs ["Int", "(Maybe String)"])
     (TaskName "Yes_Name")
 
 posFile :: FileContent

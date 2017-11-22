@@ -15,7 +15,6 @@ import           Data.List                 (find, foldl', groupBy, intercalate,
 import           Data.Maybe                (catMaybes, fromMaybe)
 import           System.Directory          (doesDirectoryExist, doesFileExist,
                                             getDirectoryContents)
-import           System.Environment        (getArgs)
 import           System.FilePath
 
 -- | A task can have three sorts of arguments.
@@ -50,18 +49,6 @@ data Task = Task
     -- ^ The name of the task.
     }
     deriving (Eq, Show)
-
--- | 'runKale' is the entry point of the Kale task discovery tool.
-runKale :: IO ()
-runKale = do
-    kaleArgs <- getArgs
-    case kaleArgs of
-        src : _ : dest : _ -> do
-            tasks <- findTasks src
-            writeTaskModule dest (mkTaskModule src tasks)
-        _ -> do
-            putStrLn usage
-            print kaleArgs
 
 newtype TaskModuleContents = TaskModuleContents { unTaskModuleContents :: String }
 
@@ -114,16 +101,16 @@ mkCommandSum :: [Task] -- ^ The list of 'Task's from which to create commands.
              -> CommandSumType
 mkCommandSum [] = CommandSumType ""
 mkCommandSum tasks = CommandSumType $ "data Command = "
-    ++ intercalate " | " (map (unTaskName . taskToSum) tasks)
+    ++ intercalate " | " (map taskToSum tasks)
     ++ " deriving (Eq, Show, Read, Generic, ParseRecord)"
 
 -- | Create a 'TaskName' from the given 'Task'.
 taskToSum :: Task -- ^ The 'Task'
-          -> TaskName
-taskToSum task = TaskName $ (unTaskName . taskName $ task) ++ case taskArgs task of
+          -> String
+taskToSum task = (unTaskName . taskName $ task) ++ case taskArgs task of
     NoArgs              -> ""
-    PositionalArgs args -> " " ++ unwords (fmap parenWrap args)
-    RecordArgs args     -> args
+    PositionalArgs args -> " " ++ unwords (args)
+    RecordArgs args     -> " " ++ args
 
 parenWrap :: String -> String
 parenWrap str
@@ -137,7 +124,7 @@ parenWrap str
 stripArgs :: String -> TaskArgs
 stripArgs =
     RecordArgs
-    . (' ' :)
+    -- . (' ' :)
     . (++ "}")
     . dropWhile (/= '{')
     . takeWhile (/= '}')
@@ -266,8 +253,9 @@ collectTopLevelParens :: String -> [String]
 collectTopLevelParens = snd . foldr go (0 :: Int, [])
   where
     go '(' (0, acc) = (1, [] : acc)
-    go '(' (p, acc) = (p + 1, acc)
-    go ')' (p, acc) = (p - 1, acc)
+    go ')' (1, acc) = (0, ')' `consFirst` acc)
+    go '(' (p, acc) = (p + 1, '(' `consFirst` acc)
+    go ')' (p, acc) = (p - 1, ')' `consFirst` acc)
     go c (0, acc)
         | isSpace c = (0, [] : acc)
         | otherwise = (0, consFirst c acc)

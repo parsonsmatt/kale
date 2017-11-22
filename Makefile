@@ -4,10 +4,13 @@ ghcid:
 example-dump:
 	cd example && stack exec -- ghc src/Lib.hs -E
 
+hpc:
+	stack clean && stack build --coverage && stack test --coverage
+
 test:
 	stack test && cd example && stack build
 
 lint:
 	stack build hlint && stack exec -- hlint .
 
-PHONY: ghcid example-dump test
+PHONY: ghcid example-dump test hpc
