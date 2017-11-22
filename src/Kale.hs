@@ -7,20 +7,38 @@ module Kale where
 import           Control.Applicative
 import           Control.Monad
 import           Control.Monad.IO.Class
-import           Control.Monad.Trans.Maybe (MaybeT(..))
+import           Control.Monad.Trans.Maybe (MaybeT (..))
 import           Data.Char                 (isAlphaNum, isLower, isSpace,
                                             isUpper, toUpper)
-import           Data.List                 (foldl', groupBy, intercalate, sort,
-                                            stripPrefix, isPrefixOf, find)
-import           Data.Maybe                (catMaybes)
+import           Data.List                 (find, foldl', groupBy, intercalate,
+                                            isPrefixOf, sort, stripPrefix)
+import           Data.Maybe                (catMaybes, fromMaybe)
 import           System.Directory          (doesDirectoryExist, doesFileExist,
                                             getDirectoryContents)
 import           System.Environment        (getArgs)
 import           System.FilePath
 
-data TaskArgs = NoArgs | PositionalArgs String | RecordArgs String deriving (Eq, Show)
-newtype TaskModule = TaskModule { unTaskModule :: String } deriving (Eq, Show)
-newtype TaskName = TaskName { unTaskName :: String } deriving (Eq, Show)
+-- | A task can have three sorts of arguments.
+data TaskArgs
+    = NoArgs
+    -- ^ If the task has no arguments, this is the constructor that we use.
+    | PositionalArgs [String]
+    -- ^ Positional arguments store a list of types, with one entry per
+    -- argument.
+    | RecordArgs String
+    -- ^ Record arguments are stored as a whole string with no attempt to
+    -- parse the types out of them.
+    deriving (Eq, Show)
+
+newtype TaskModule
+    = TaskModule
+    { unTaskModule :: String
+    } deriving (Eq, Show)
+
+newtype TaskName
+    = TaskName
+    { unTaskName :: String
+    } deriving (Eq, Show)
 
 -- | The 'Task' datatype represents a user-define task.
 data Task = Task
@@ -103,17 +121,23 @@ mkCommandSum tasks = CommandSumType $ "data Command = "
 taskToSum :: Task -- ^ The 'Task'
           -> TaskName
 taskToSum task = TaskName $ (unTaskName . taskName $ task) ++ case taskArgs task of
-    NoArgs -> ""
-    PositionalArgs args -> stripArgs args
-    RecordArgs args -> stripArgs args
+    NoArgs              -> ""
+    PositionalArgs args -> " " ++ unwords (fmap parenWrap args)
+    RecordArgs args     -> args
+
+parenWrap :: String -> String
+parenWrap str
+    | length (words str) > 1 = concat ["(", str, ")"]
+    | otherwise = str
 
 -- | Strips all but the record fields from a data type.
 --
 -- >>> stripArgs "data Args = Args { foo :: Int }"
--- " { foo :: Int }"
-stripArgs :: String -> String
+-- "RecordArgs \"{ foo :: Int }\""
+stripArgs :: String -> TaskArgs
 stripArgs =
-    (' ' :)
+    RecordArgs
+    . (' ' :)
     . (++ "}")
     . dropWhile (/= '{')
     . takeWhile (/= '}')
@@ -121,24 +145,41 @@ stripArgs =
 -- | Create the String represntation of the case expression for the given 'Task'.
 mkCaseOf :: Task -- ^ The 'Task'
          -> String
-mkCaseOf task = concat
-    [ unTaskName . taskName $ task
-    , case taskArgs task of
-        NoArgs -> ""
-        _ -> "{..}"
-    --, maybe "" (const "{..}") (taskArgs task)
-    , " -> "
-    , unTaskModule . taskModule $ task
-    , "Task.task"
-    , case taskArgs task of
+mkCaseOf task = unwords . filter (not . null) $
+    [ unTaskName (taskName task)
+    , mkCaseMatch task
+    , "->"
+    , unTaskModule (taskModule task) ++ "Task.task"
+    , mkCaseBranch task
+    ]
+
+mkCaseBranch :: Task -> String
+mkCaseBranch task =
+    case taskArgs task of
         NoArgs ->
             ""
-        _ -> concat
-            [ " "
-            , unTaskModule . taskModule $ task
-            , "Task.Args {..}"
-            ]
-    ]
+        RecordArgs _ ->
+            (unTaskModule . taskModule $ task) ++ "Task.Args {..}"
+        PositionalArgs args ->
+            concat
+                [ "("
+                , unTaskModule . taskModule $ task
+                , "Task.Args "
+                , mkArgsList args
+                , ")"
+                ]
+
+mkCaseMatch :: Task -> String
+mkCaseMatch task =
+    case taskArgs task of
+        NoArgs -> ""
+        RecordArgs _ ->
+            "{..}"
+        PositionalArgs args ->
+            mkArgsList args
+
+mkArgsList :: [String] -> String
+mkArgsList = unwords . zipWith3 (\a i _ -> a ++ show i) (repeat "arg") [0 :: Int ..]
 
 -- | Indent the given Strings by the given number of spaces.
 indent :: Int      -- ^ The number of spaces to indent.
@@ -200,15 +241,37 @@ casify str = intercalate "_" $ groupBy (\a b -> isUpper a && isLower b) str
 -- | Create 'TaskArgs' from the given task module contents.
 mkTaskArgs :: FileContent -> TaskArgs
 mkTaskArgs fileContent = case findArgs fileContent of
-  Nothing -> NoArgs
+  Nothing ->
+      NoArgs
   Just args ->
     if '{' `elem` args
-    then PositionalArgs args
-    else RecordArgs args
+    then stripArgs args
+    else processPositional args
 
 -- | Create a 'TaskName' from the given string.
 mkTaskName :: String -> TaskName
 mkTaskName = TaskName . casify
+
+processPositional :: String -> TaskArgs
+processPositional str =
+    PositionalArgs
+    . takeWhile (/= "deriving")
+    . collectTopLevelParens
+    . dropWhile isSpace
+    . fromMaybe (error "The Args type must have a single constructor named Args")
+    . stripPrefix "data Args = Args"
+    $ collapseSpace str
+
+collectTopLevelParens :: String -> [String]
+collectTopLevelParens = snd . foldr go (0 :: Int, [])
+  where
+    go '(' (0, acc) = (1, [] : acc)
+    go '(' (p, acc) = (p + 1, acc)
+    go ')' (p, acc) = (p - 1, acc)
+    go c (0, acc)
+        | isSpace c = (0, [] : acc)
+        | otherwise = (0, consFirst c acc)
+    go c (p, acc) = (p, consFirst c acc)
 
 -- | Parse task module arguments from the task module file contents.
 findArgs :: FileContent -- ^ Task module file contents.
@@ -225,8 +288,12 @@ decs = reverse . fmap (collapseSpace . concat . reverse) . foldl' go [] . lines
         | otherwise =
             [line] : acc
     go acc [] = acc
-    consFirst a []     = [[a]]
-    consFirst a (x:xs) = (a : x) : xs
+
+-- | Cons something onto the first list in the list of lists. If there
+-- isn't a first list yet, make one.
+consFirst :: a -> [[a]] -> [[a]]
+consFirst a []     = [[a]]
+consFirst a (x:xs) = (a : x) : xs
 
 -- | Collapses multiple spaces to a single space.
 collapseSpace :: String -> String

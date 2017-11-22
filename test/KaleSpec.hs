@@ -58,22 +58,40 @@ spec = do
         it "is empty on empty task lists" $
             unCommandSumType (mkCommandSum []) `shouldBe` ""
         it "lists tasktnames properly" $
-            unCommandSumType (mkCommandSum [task0, task1])
+            unCommandSumType (mkCommandSum [task0, task1, task2])
                 `shouldBe` concat
                     [ "data Command = Name { foo :: Int }"
-                    , " | Other_Name deriving (Eq, "
+                    , " | Other_Name | Yes_Name Int (Maybe String) deriving (Eq, "
                     , "Show, Read, Generic, ParseRecord)"
                     ]
+
+    describe "taskToSum" $ do
+        it "works with positional arguments" $ do
+            taskToSum task2
+                `shouldBe`
+                    TaskName "Yes_Name Int (Maybe String)"
 
     describe "mkCaseOf" $ do
         it "works with args" $ do
             mkCaseOf task0
                 `shouldBe`
-                    "Name{..} -> Module.FooTask.task Module.FooTask.Args {..}"
+                    "Name {..} -> Module.FooTask.task Module.FooTask.Args {..}"
         it "works without args" $ do
             mkCaseOf task1
                 `shouldBe`
                     "Other_Name -> Module1.FooTask.task"
+        it "works with positional args" $ do
+            mkCaseOf task2
+                `shouldBe`
+                    "Yes_Name arg0 arg1 -> Module1.BarTask.task (Module1.BarTask.Args arg0 arg1)"
+
+    describe "mkCaseMatch" $ do
+        it "works on record arguments" $ do
+            mkCaseMatch task0 `shouldBe` "{..}"
+        it "works on empty arguments" $ do
+            mkCaseMatch task1 `shouldBe` ""
+        it "works on positional arguments" $ do
+            mkCaseMatch task2 `shouldBe` "arg0 arg1"
 
     describe "mkTask" $ do
         it "is Nothing for taskArgs when fileContent is empty" $
@@ -92,10 +110,28 @@ spec = do
                         ]
 
     describe "findArgs" $ do
-        it "correctly finds arguments" $ do
+        it "finds record arguments" $ do
             findArgs args0
                 `shouldBe`
                     Just "data Args = Args { fooId :: Int , barId :: Int }"
+        it "finds positional arguments" $ do
+            findArgs args1
+                `shouldBe`
+                    Just "data Args = Args Int String"
+
+    describe "processPositional" $ do
+        it "formats positional arguments" $ do
+            processPositional "data Args = Args Int String"
+                `shouldBe`
+                    PositionalArgs ["Int", "String"]
+        it "works with type constructors" $ do
+            processPositional "data Args = Args (Maybe String) Int"
+                `shouldBe`
+                    PositionalArgs ["Maybe String", "Int"]
+        it "is fine with deriving" $ do
+            processPositional "data Args = Args (Maybe String) Int deriving Show"
+                `shouldBe`
+                    PositionalArgs ["Maybe String", "Int"]
 
 args0 :: FileContent
 args0 = FileContent $ unlines
@@ -106,6 +142,22 @@ args0 = FileContent $ unlines
     , "  { fooId :: Int"
     , "  , barId :: Int"
     , "  }"
+    ]
+
+args1 :: FileContent
+args1 = FileContent $ unlines
+    [ "module ASdf where"
+    , ""
+    , "data Args"
+    , "  = Args Int String"
+    ]
+
+args3 :: FileContent
+args3 = FileContent $ unlines
+    [ "module FooBar where"
+    , "data Args"
+    , " = Args Int String"
+    , " deriving (Eq, Show)"
     ]
 
 decs0 :: String
@@ -152,7 +204,25 @@ decs4 = unlines
 
 
 task0 :: Task
-task0 = Task (TaskModule "Module.Foo") (RecordArgs "data Args = Args { foo :: Int }") (TaskName "Name")
+task0 = Task (TaskModule "Module.Foo") (stripArgs "data Args = Args { foo :: Int }") (TaskName "Name")
 
 task1 :: Task
 task1 = Task (TaskModule "Module1.Foo") NoArgs (TaskName "Other_Name")
+
+task2 :: Task
+task2 = Task
+    (TaskModule "Module1.Bar")
+    (PositionalArgs ["Int", "Maybe String"])
+    (TaskName "Yes_Name")
+
+posFile :: FileContent
+posFile = FileContent $ unlines
+    [ "module Lib.PosTask where"
+    , ""
+    , "data Args = Args Int String"
+    , ""
+    , "task :: Args -> IO ()"
+    , "task (Args i s) = do"
+    , "    print i"
+    , "    putStrLn s"
+    ]
