@@ -112,11 +112,6 @@ taskToSum task = (unTaskName . taskName $ task) ++ case taskArgs task of
     PositionalArgs args -> " " ++ unwords args
     RecordArgs args     -> " " ++ args
 
-parenWrap :: String -> String
-parenWrap str
-    | length (words str) > 1 = concat ["(", str, ")"]
-    | otherwise = str
-
 -- | Strips all but the record fields from a data type.
 --
 -- >>> stripArgs "data Args = Args { foo :: Int }"
@@ -195,7 +190,7 @@ fileToTask dir file = runMaybeT $
             guard (isValidModuleName name && all isValidModuleName xs)
             let fileName = dir </> file
             moduleContents <- liftIO $ FileContent <$> readFile fileName
-            pure (mkTask moduleContents (mkTaskName name) (TaskModule $ intercalate "." (reverse (name : xs))))
+            pure (mkTask moduleContents (casify name) (TaskModule $ intercalate "." (reverse (name : xs))))
   where
     stripSuffixes :: String -> Maybe String
     stripSuffixes x =
@@ -218,8 +213,8 @@ mkTask fileContent name mod_ = Task
     }
 
 -- | Convert a String in camel case to snake case.
-casify :: String -> String
-casify str = intercalate "_" $ groupBy (\a b -> isUpper a && isLower b) str
+casify :: String -> TaskName
+casify str = TaskName . intercalate "_" $ groupBy (\a b -> isUpper a && isLower b) str
 
 -- | Create 'TaskArgs' from the given task module contents.
 mkTaskArgs :: FileContent -> TaskArgs
@@ -230,10 +225,6 @@ mkTaskArgs fileContent = case findArgs fileContent of
     if '{' `elem` args
     then stripArgs args
     else processPositional args
-
--- | Create a 'TaskName' from the given string.
-mkTaskName :: String -> TaskName
-mkTaskName = TaskName . casify
 
 processPositional :: String -> TaskArgs
 processPositional str =

@@ -21,13 +21,13 @@ spec = do
 
     describe "casify" $ do
         it "simple case works" $
-            casify "HelloWorld" `shouldBe` "Hello_World"
+            casify "HelloWorld" `shouldBe` TaskName "Hello_World"
         it "acts strange with many caps letters" $
-            casify "HTTPWorker" `shouldBe` "H_T_T_P_Worker"
+            casify "HTTPWorker" `shouldBe` TaskName "H_T_T_P_Worker"
         -- the inputs to casify will always be module names, so the below should
         -- not happen
         it "acts strange with initial lowercase" $
-            casify "lowHigh" `shouldBe` "l_o_w_High"
+            casify "lowHigh" `shouldBe` TaskName "l_o_w_High"
 
     describe "decs" $ do
         it "roughly parses declarations" $ do
@@ -135,6 +135,10 @@ spec = do
             findArgs args1
                 `shouldBe`
                     Just "data Args = Args Int String"
+        it "works with deriving" $ do
+            findArgs args2
+                `shouldBe`
+                    Just "data Args = Args Int String deriving (Eq, Show)"
 
     describe "processPositional" $ do
         it "formats positional arguments" $ do
@@ -193,8 +197,8 @@ args1 = FileContent $ unlines
     , "  = Args Int String"
     ]
 
-args3 :: FileContent
-args3 = FileContent $ unlines
+args2 :: FileContent
+args2 = FileContent $ unlines
     [ "module FooBar where"
     , "data Args"
     , " = Args Int String"
@@ -234,16 +238,6 @@ decs3 = unlines
     , "}"
     ]
 
-decs4 :: String
-decs4 = unlines
-    [ "module Wat where"
-    , "data Args = Args"
-    , "  { fooName :: String"
-    , "  , fooAge  :: Int"
-    , "  }"
-    ]
-
-
 task0 :: Task
 task0 = Task (TaskModule "Module.Foo") (stripArgs "data Args = Args { foo :: Int }") (TaskName "Name")
 
@@ -255,15 +249,3 @@ task2 = Task
     (TaskModule "Module1.Bar")
     (PositionalArgs ["Int", "(Maybe String)"])
     (TaskName "Yes_Name")
-
-posFile :: FileContent
-posFile = FileContent $ unlines
-    [ "module Lib.PosTask where"
-    , ""
-    , "data Args = Args Int String"
-    , ""
-    , "task :: Args -> IO ()"
-    , "task (Args i s) = do"
-    , "    print i"
-    , "    putStrLn s"
-    ]
