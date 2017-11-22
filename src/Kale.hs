@@ -240,7 +240,6 @@ collectTopLevelParens :: String -> [String]
 collectTopLevelParens = snd . foldr go (0 :: Int, [])
   where
     go '(' (0, acc) = (1, [] : acc)
-    go ')' (1, acc) = (0, ')' `consFirst` acc)
     go '(' (p, acc) = (p + 1, '(' `consFirst` acc)
     go ')' (p, acc) = (p - 1, ')' `consFirst` acc)
     go c (0, acc)
