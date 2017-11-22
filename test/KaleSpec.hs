@@ -8,9 +8,9 @@ spec :: Spec
 spec = do
     describe "driver" $ do
         it "is empty on empty tasks" $
-            driver [] `shouldBe` ""
+            unDriver (driver []) `shouldBe` ""
         it "has command sum" $
-            driver [Task "Foo.Bar" Nothing "Bar"]
+            unDriver (driver [Task (TaskModule "Foo.Bar") NoArgs (TaskName "Bar")])
                 `shouldBe` unlines
                     [ "kaleMain :: IO ()"
                     , "kaleMain = do"
@@ -24,6 +24,8 @@ spec = do
             casify "HelloWorld" `shouldBe` "Hello_World"
         it "acts strange with many caps letters" $
             casify "HTTPWorker" `shouldBe` "H_T_T_P_Worker"
+        -- the inputs to casify will always be module names, so the below should
+        -- not happen
         it "acts strange with initial lowercase" $
             casify "lowHigh" `shouldBe` "l_o_w_High"
 
@@ -54,16 +56,28 @@ spec = do
 
     describe "mkCommandSum" $ do
         it "is empty on empty task lists" $
-            mkCommandSum [] `shouldBe` ""
+            unCommandSumType (mkCommandSum []) `shouldBe` ""
         it "lists tasktnames properly" $
-            mkCommandSum [task0, task1] 
+            unCommandSumType (mkCommandSum [task0, task1])
+                `shouldBe` concat
+                    [ "data Command = Name { foo :: Int }"
+                    , " | Other_Name deriving (Eq, "
+                    , "Show, Read, Generic, ParseRecord)"
+                    ]
+
+    describe "mkCaseOf" $ do
+        it "works with args" $ do
+            mkCaseOf task0
                 `shouldBe`
-                    unwords ["data Command = Name|Other_Name deriving (Eq,",
-                        "Show, Read, Generic, ParseRecord)"]
+                    "Name{..} -> Module.FooTask.task Module.FooTask.Args {..}"
+        it "works without args" $ do
+            mkCaseOf task1
+                `shouldBe`
+                    "Other_Name -> Module1.FooTask.task"
 
     describe "mkTask" $ do
         it "is Nothing for taskArgs when fileContent is empty" $
-            mkTask "" "OtherName" "Module1.foo" `shouldBe` task1
+            mkTask (FileContent "") (TaskName "Other_Name") (TaskModule "Module1.Foo") `shouldBe` task1
 
     describe "pathToModule" $ do
         it "parses directories and file extensions" $
@@ -71,14 +85,29 @@ spec = do
 
     describe "importList" $ do
         it "pulls out taskModules and splits into newlines" $
-            importList [task0, task1] `shouldBe`
+            unImportList (importList [task0, task1]) `shouldBe`
                 unlines [
-                        "import qualified Module.fooTask",
-                        "import qualified Module1.fooTask"
+                        "import qualified Module.FooTask",
+                        "import qualified Module1.FooTask"
                         ]
-    
-                    
-                    
+
+    describe "findArgs" $ do
+        it "correctly finds arguments" $ do
+            findArgs args0
+                `shouldBe`
+                    Just "data Args = Args { fooId :: Int , barId :: Int }"
+
+args0 :: FileContent
+args0 = FileContent $ unlines
+    [ "module ASdf where"
+    , ""
+    , "data Args"
+    , "  = Args"
+    , "  { fooId :: Int"
+    , "  , barId :: Int"
+    , "  }"
+    ]
+
 decs0 :: String
 decs0 = unlines
     [ "module Foo where"
@@ -112,8 +141,18 @@ decs3 = unlines
     , "}"
     ]
 
+decs4 :: String
+decs4 = unlines
+    [ "module Wat where"
+    , "data Args = Args"
+    , "  { fooName :: String"
+    , "  , fooAge  :: Int"
+    , "  }"
+    ]
+
+
 task0 :: Task
-task0 = Task "Module.foo" (Just "args0 args1") "Name"
+task0 = Task (TaskModule "Module.Foo") (RecordArgs "data Args = Args { foo :: Int }") (TaskName "Name")
 
 task1 :: Task
-task1 = Task "Module1.foo" Nothing "Other_Name"
+task1 = Task (TaskModule "Module1.Foo") NoArgs (TaskName "Other_Name")

@@ -7,29 +7,28 @@ module Kale where
 import           Control.Applicative
 import           Control.Monad
 import           Control.Monad.IO.Class
-import           Control.Monad.Trans.Maybe
-import           Data.Char
-import           Data.List
-import           Data.Maybe
-import           Data.String
-import           Data.Traversable          (for)
+import           Control.Monad.Trans.Maybe (MaybeT(..))
+import           Data.Char                 (isAlphaNum, isLower, isSpace,
+                                            isUpper, toUpper)
+import           Data.List                 (foldl', groupBy, intercalate, sort,
+                                            stripPrefix, isPrefixOf, find)
+import           Data.Maybe                (catMaybes)
 import           System.Directory          (doesDirectoryExist, doesFileExist,
                                             getDirectoryContents)
 import           System.Environment        (getArgs)
-import           System.Exit
 import           System.FilePath
-import           System.IO
 
-instance IsString ShowS where
-  fromString = showString
+data TaskArgs = NoArgs | PositionalArgs String | RecordArgs String deriving (Eq, Show)
+newtype TaskModule = TaskModule { unTaskModule :: String } deriving (Eq, Show)
+newtype TaskName = TaskName { unTaskName :: String } deriving (Eq, Show)
 
 -- | The 'Task' datatype represents a user-define task.
 data Task = Task
-    { taskModule :: String
+    { taskModule :: TaskModule
     -- ^ The name of the task module.
-    , taskArgs   :: Maybe String
+    , taskArgs   :: TaskArgs
     -- ^ The arguments to provide to the task.
-    , taskName   :: String
+    , taskName   :: TaskName
     -- ^ The name of the task.
     }
     deriving (Eq, Show)
@@ -41,37 +40,48 @@ runKale = do
     case kaleArgs of
         src : _ : dest : _ -> do
             tasks <- findTasks src
-            writeFile dest (mkTaskModule src tasks)
+            writeTaskModule dest (mkTaskModule src tasks)
         _ -> do
             putStrLn usage
             print kaleArgs
 
+newtype TaskModuleContents = TaskModuleContents { unTaskModuleContents :: String }
+
+-- | Write the given task module contents to the specified file.
+writeTaskModule :: FilePath           -- ^ The file to write to.
+                -> TaskModuleContents -- ^ Content of the task module.
+                -> IO ()
+writeTaskModule dest taskModuleContents = writeFile dest (unTaskModuleContents taskModuleContents)
+
 -- | Generates the Haskell source code for a task module.
-mkTaskModule :: FilePath -- ^ The path to the module
-             -> [Task]   -- ^ The list of Tasks from which to generate module code.
-             -> String
-mkTaskModule src tasks = unlines
+mkTaskModule :: FilePath           -- ^ The path to the module
+             -> [Task]             -- ^ The list of Tasks from which to generate module code.
+             -> TaskModuleContents
+mkTaskModule src tasks = TaskModuleContents $ unlines
   [ "{-# LINE 1 " ++ show src ++ " #-}"
   , "{-# OPTIONS_GHC -fno-warn-warnings-deprecations #-}\n"
   , "{-# LANGUAGE DeriveGeneric #-}"
   , "{-# LANGUAGE DeriveAnyClass #-}"
   , "{-# LANGUAGE OverloadedStrings #-}"
+  , "{-# LANGUAGE RecordWildCards #-}"
   , ""
   , "module " ++ pathToModule src ++ " where"
   , ""
   , "import Kale.Discover"
-  , importList tasks
+  , unImportList $ importList tasks
   , ""
-  , mkCommandSum tasks
+  , unCommandSumType $ mkCommandSum tasks
   , ""
-  , driver tasks
+  , unDriver $ driver tasks
   ]
+
+newtype Driver = Driver { unDriver :: String }
 
 -- | Generates Haskell source code for a module "driver".
 driver :: [Task] -- ^ The list of 'Task's from which to generate module code.
-       -> String
-driver [] = ""
-driver tasks = unlines $
+       -> Driver
+driver [] = Driver ""
+driver tasks = Driver $ unlines $
     [ "kaleMain :: IO ()"
     , "kaleMain = do"
     ] ++ indent 2
@@ -79,24 +89,56 @@ driver tasks = unlines $
     , "case (cmd :: Command) of"
     ] ++ indent 4 (map mkCaseOf tasks)
 
+newtype CommandSumType = CommandSumType { unCommandSumType :: String }
+
 -- | Generates Haskell source code for a command data type specific to this module.
 mkCommandSum :: [Task] -- ^ The list of 'Task's from which to create commands.
-             -> String
-mkCommandSum [] = ""
-mkCommandSum tasks = "data Command = "
-    ++ intercalate "|" (map taskToSum tasks)
+             -> CommandSumType
+mkCommandSum [] = CommandSumType ""
+mkCommandSum tasks = CommandSumType $ "data Command = "
+    ++ intercalate " | " (map (unTaskName . taskToSum) tasks)
     ++ " deriving (Eq, Show, Read, Generic, ParseRecord)"
 
--- | Creates the String representation of a command sum type for the given 'Task'.
+-- | Create a 'TaskName' from the given 'Task'.
 taskToSum :: Task -- ^ The 'Task'
-          -> String
-taskToSum = taskName
+          -> TaskName
+taskToSum task = TaskName $ (unTaskName . taskName $ task) ++ case taskArgs task of
+    NoArgs -> ""
+    PositionalArgs args -> stripArgs args
+    RecordArgs args -> stripArgs args
+
+-- | Strips all but the record fields from a data type.
+--
+-- >>> stripArgs "data Args = Args { foo :: Int }"
+-- " { foo :: Int }"
+stripArgs :: String -> String
+stripArgs =
+    (' ' :)
+    . (++ "}")
+    . dropWhile (/= '{')
+    . takeWhile (/= '}')
 
 -- | Create the String represntation of the case expression for the given 'Task'.
 mkCaseOf :: Task -- ^ The 'Task'
          -> String
 mkCaseOf task = concat
-    [taskName task, " -> ", taskModule task, "Task.task"]
+    [ unTaskName . taskName $ task
+    , case taskArgs task of
+        NoArgs -> ""
+        _ -> "{..}"
+    --, maybe "" (const "{..}") (taskArgs task)
+    , " -> "
+    , unTaskModule . taskModule $ task
+    , "Task.task"
+    , case taskArgs task of
+        NoArgs ->
+            ""
+        _ -> concat
+            [ " "
+            , unTaskModule . taskModule $ task
+            , "Task.Args {..}"
+            ]
+    ]
 
 -- | Indent the given Strings by the given number of spaces.
 indent :: Int      -- ^ The number of spaces to indent.
@@ -128,8 +170,8 @@ fileToTask dir file = runMaybeT $
             name <- MaybeT . pure . stripSuffixes $ x
             guard (isValidModuleName name && all isValidModuleName xs)
             let fileName = dir </> file
-            moduleContents <- liftIO $ readFile fileName
-            pure (mkTask moduleContents name (intercalate "." (reverse (name : xs))))
+            moduleContents <- liftIO $ FileContent <$> readFile fileName
+            pure (mkTask moduleContents (mkTaskName name) (TaskModule $ intercalate "." (reverse (name : xs))))
   where
     stripSuffixes :: String -> Maybe String
     stripSuffixes x =
@@ -138,25 +180,40 @@ fileToTask dir file = runMaybeT $
     stripSuffix suffix str =
         reverse <$> stripPrefix (reverse suffix) (reverse str)
 
+newtype FileContent = FileContent { unFileContent :: String }
+
 -- | Creates a 'Task' from file contents and metadata.
-mkTask :: String -- ^ Contents of a task file.
-       -> String -- ^ The name of the 'Task'.
-       -> String -- ^ The name of the task module.
+mkTask :: FileContent -- ^ Contents of a task file.
+       -> TaskName    -- ^ The name of the 'Task'.
+       -> TaskModule  -- ^ The name of the task module.
        -> Task
 mkTask fileContent name mod_ = Task
     { taskModule = mod_
-    , taskArgs   = findArgs fileContent
-    , taskName   = casify name
+    , taskArgs   = mkTaskArgs fileContent
+    , taskName   = name
     }
 
 -- | Convert a String in camel case to snake case.
 casify :: String -> String
 casify str = intercalate "_" $ groupBy (\a b -> isUpper a && isLower b) str
 
+-- | Create 'TaskArgs' from the given task module contents.
+mkTaskArgs :: FileContent -> TaskArgs
+mkTaskArgs fileContent = case findArgs fileContent of
+  Nothing -> NoArgs
+  Just args ->
+    if '{' `elem` args
+    then PositionalArgs args
+    else RecordArgs args
+
+-- | Create a 'TaskName' from the given string.
+mkTaskName :: String -> TaskName
+mkTaskName = TaskName . casify
+
 -- | Parse task module arguments from the task module file contents.
-findArgs :: String   -- ^ Task module file contents.
+findArgs :: FileContent -- ^ Task module file contents.
          -> Maybe String
-findArgs file =  Nothing
+findArgs = find ("data Args" `isPrefixOf`) . decs . unFileContent
 
 -- | Splits a string by declarations.
 decs :: String -> [String]
@@ -204,9 +261,11 @@ pathToModule f = toUpper m:ms
     fileName = last $ splitDirectories f
     m:ms = takeWhile (/='.') fileName
 
+newtype ImportList = ImportList { unImportList :: String } deriving (Show)
+
 -- | Generate imports for a list of specs.
-importList :: [Task] -> String
-importList = unlines . map f
+importList :: [Task] -> ImportList
+importList = ImportList . unlines . map f
   where
     f :: Task -> String
-    f task = "import qualified " ++ taskModule task ++ "Task"
+    f task = "import qualified " ++ unTaskModule (taskModule task) ++ "Task"
