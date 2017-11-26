@@ -13,4 +13,4 @@ test:
 lint:
 	stack build hlint && stack exec -- hlint .
 
-PHONY: ghcid example-dump test hpc
+.PHONY: ghcid example-dump test hpc
