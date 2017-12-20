@@ -50,6 +50,18 @@ data Task = Task
     }
     deriving (Eq, Show)
 
+type Qualified = String
+type Module = String
+
+data Import = Import Module (Maybe Qualified)
+
+data Syntax = Syntax
+    { imports :: [Import]
+    , commandSumType :: CommandSumType
+    , driver_ :: Driver
+    --      ^ underscore to avoid conflict with the function 'driver'.
+    }
+
 newtype TaskModuleContents = TaskModuleContents { unTaskModuleContents :: String }
 
 -- | Write the given task module contents to the specified file.
