@@ -3,7 +3,41 @@
 [![Build Status](https://travis-ci.org/parsonsmatt/kale.svg?branch=master)](https://travis-ci.org/parsonsmatt/kale)
 [![Coverage Status](https://coveralls.io/repos/github/parsonsmatt/kale/badge.svg?branch=master)](https://coveralls.io/github/parsonsmatt/kale?branch=master)
 
-A tool for creating command line interfaces.
+A tool for creating command line interfaces, Kale automates the process by using the idea of a `Task`.
+
+## An Example
+
+A `Task` is an abstraction over the command-line arguments and the corresponding actions to be taken. These arguments are to be specified using the type, `Args`. Kale expects these Tasks to be named with the suffix 'Task' like 'FooTask.hs'. Kale auto-discovers them for you and generates the basic boiler plate like so:
+If the user defines Tasks like "Lib.FooTask.hs" and "Lib.BarTask.hs",
+
+```
+module Lib.FooTask where
+
+data Args = Args { i am command line arguments for the program }
+
+task :: Args -> IO ()
+task args = ...
+```
+Kale generates the following:
+
+```
+module Task where
+
+import qualified Lib.FooTask as FooTask
+import qualified Lib.BarTask as BarTask
+-- ...
+
+data Command = Foo { fooArgs ... } | Bar { barArgs ... } | ...
+  deriving (Generic, ParseRecord)
+
+main :: IO ()
+main = do
+  cmd <- getRecord "the program"
+  case cmd of
+    Foo  {..} -> FooTask.task FooTask.Args {..}
+    Bar {..} -> BarTask.task BarTask.Args {..}
+    ...
+```
 
 ## Beginner's Welcome!
 
