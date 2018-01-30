@@ -23,3 +23,61 @@ While hacking, you can run `make test` to run the unit tests and build the examp
 You can run `make lint` to run `hlint` over the project.
 
 For a super fast reload and test runner, use `make ghcid`.
+
+## Usage
+
+There are several steps that are required in order to take advantage of kale's features.
+
+1. Create a project.
+
+    You can do this manually or by using `stack` like so:
+
+        $ stack new my-cool-task
+
+    However you create your project these instructions assume you have a directory
+    structure similar to that described
+    [here](https://wiki.haskell.org/Structure_of_a_Haskell_project#Directory_Structure).
+
+2. Add kale as a dependency.
+
+    Add an entry for `kale` to the `extra-deps` section of your `stack.yaml`
+    file:
+
+	    extra-deps
+          - git: git@github.com:parsonsmatt/kale.git
+            commit: <current-commit-hash>
+
+    Replace `<current-commit-hash>` with the most recent git hash of the `kale`
+    project.
+
+	Then, add `kale` to the `build-depends` section of you cabal file.
+
+3. Create one or more tasks.
+
+    In the `Lib` directory create one module for each task that you need.  At a
+    minimum each task module must define a top-level definition named `task`.
+    If your task will not accept any arguments, then it's type should be `IO
+    ()`.  If your task takes does take arguments, the type should be `Args -> IO
+    ()` and you must define the `Args` data type.  The value(s) of the `Args`
+    data type are up to you.
+
+4. Enable the pre-processor.
+
+    `kale` utilizes the pre-processing step of compilation process to generate
+    the necessary boilerplact.  To enable the pre-processor create the file
+    `src/Lib.hs` if it does not already exist and ensure that it has only the
+    following contents:
+
+	    {-# OPTIONS_GHC -F -pgmF kale-discover #-}
+
+5. Call `kaleMain`.
+
+    Create the file `src/Main.hs` if it does not already exist and ensure that
+    it has only the following contents:
+
+	    module Main where
+
+        import Lib
+
+        main :: IO ()
+        main = Lib.kaleMain
