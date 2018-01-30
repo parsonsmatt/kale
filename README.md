@@ -63,8 +63,8 @@ There are several steps that are required in order to take advantage of kale's f
 
 4. Enable the pre-processor.
 
-    `kale` utilizes the pre-processing step of compilation process to generate
-    the necessary boilerplact.  To enable the pre-processor create the file
+    `kale` utilizes the pre-processing step of the compilation process to generate
+    the necessary boilerplate.  To enable the pre-processor create the file
     `src/Lib.hs` if it does not already exist and ensure that it has only the
     following contents:
 
@@ -81,3 +81,11 @@ There are several steps that are required in order to take advantage of kale's f
 
         main :: IO ()
         main = Lib.kaleMain
+
+Once that is complete you can build the project:
+
+    $ stack build
+
+Then, try out your new executable:
+
+    $ ./stack-work/<path-to-binary> <zero-or-more-arguments>
