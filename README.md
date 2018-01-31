@@ -50,27 +50,42 @@ There are several steps that are required in order to take advantage of kale's f
     Replace `<current-commit-hash>` with the most recent git hash of the `kale`
     project.
 
-	Then, add `kale` to the `build-depends` section of you cabal file.
+	Then, add `kale` to the `build-depends` section of your cabal file.
 
-3. Create one or more tasks.
+3. Enabling the pre-processor.
 
-    In the `Lib` directory create one module for each task that you need.  At a
-    minimum each task module must define a top-level definition named `task`.
-    If your task will not accept any arguments, then it's type should be `IO
-    ()`.  If your task takes does take arguments, the type should be `Args -> IO
-    ()` and you must define the `Args` data type.  The value(s) of the `Args`
-    data type are up to you.
-
-4. Enable the pre-processor.
-
-    `kale` utilizes the pre-processing step of the compilation process to generate
-    the necessary boilerplate.  To enable the pre-processor create the file
-    `src/Lib.hs` if it does not already exist and ensure that it has only the
-    following contents:
+    `kale` utilizes the pre-processing step of the compiler to generate the
+    necessary boilerplate. First, create the top-level module that will
+    namespace all of the tasks you want to do. For this example, we'll create
+    `src/Lib.hs`. This file will contain only a single line, the GHC pragma to
+    use the kale-discover preprocessor:
 
 	    {-# OPTIONS_GHC -F -pgmF kale-discover #-}
 
-5. Call `kaleMain`.
+4. Adding Tasks
+
+    `kale` searches for modules namespaced under the one you put the annotation
+    in. So `src/Lib.hs` is going to look for modules with a name matching
+    `Lib.*Task`. Creating a new task module will add a new command to the
+    executable.
+
+	The module name will be converted into kebab-case for the command
+    line. Assuming an executable name of `tasks`, then `Lib.FooTask` will be
+    invoked like `tasks foo`, and `Lib.RunJobTask` will be run as `tasks
+    run-job`. You must define the actual task logic in a function `task :: IO
+    ()`.
+
+5. Adding Arguments
+
+    By default, `kale` expects `task :: IO ()`. If you want to provide command
+    line arguments, then you will need to define a data type called `Args` with
+    a single constructor `Args`. If `Args` is a record, then it'll be parsed as
+    keyword arguments. If `Args` is an ordinary product, then they are
+    interpreted as positional arguments.
+
+    The function task will then have the type `task :: Args -> IO ()`.
+
+6. Call `kaleMain`.
 
     Create the file `src/Main.hs` if it does not already exist and ensure that
     it has only the following contents:
