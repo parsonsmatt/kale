@@ -5,7 +5,7 @@
 
 A tool for creating command line interfaces.
 
-## Beginner's Welcome!
+## Beginners Welcome!
 
 This is a great project to contribute to if you'd like experience working on a real-world practical Haskell codebase.
 There are a number of issues in the issue tracker, each of which should have enough information to get you started.
