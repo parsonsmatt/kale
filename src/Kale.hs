@@ -96,7 +96,8 @@ driver tasks = Driver $ unlines $
 
 newtype CommandSumType = CommandSumType { unCommandSumType :: String }
 
--- | Generates Haskell source code for a command data type specific to this module.
+-- | Generates Haskell source code as String for a sum type representing all the
+--   tasks that can be performed from the given 'Task' list.
 mkCommandSum :: [Task] -- ^ The list of 'Task's from which to create commands.
              -> CommandSumType
 mkCommandSum [] = CommandSumType ""
@@ -104,7 +105,8 @@ mkCommandSum tasks = CommandSumType $ "data Command = "
     ++ intercalate " | " (map taskToSum tasks)
     ++ " deriving (Eq, Show, Read, Generic, ParseRecord)"
 
--- | Create a 'TaskName' from the given 'Task'.
+-- | Generates Haskell source code as String for a value constructor that
+--   represents the command for the given 'Task'.
 taskToSum :: Task -- ^ The 'Task'
           -> String
 taskToSum task = (unTaskName . taskName $ task) ++ case taskArgs task of
@@ -124,7 +126,9 @@ stripArgs =
     . dropWhile (/= '{')
     . takeWhile (/= '}')
 
--- | Create the String represntation of the case expression for the given 'Task'.
+-- | Generates Haskell source code as String for a case expression that could
+--   be matched on a value of type "Command" produced by the 'mkCommandSum'
+--   function.
 mkCaseOf :: Task -- ^ The 'Task'
          -> String
 mkCaseOf task = unwords . filter (not . null) $
@@ -135,7 +139,11 @@ mkCaseOf task = unwords . filter (not . null) $
     , mkCaseBranch task
     ]
 
-mkCaseBranch :: Task -> String
+-- | Generates Haskell source code as String for the argument to be passed to a
+--   call of the "task" function defined in the Haskell module from which the
+--   'Task' was created.
+mkCaseBranch :: Task -- ^ The 'Task'
+             -> String
 mkCaseBranch task =
     case taskArgs task of
         NoArgs ->
@@ -151,7 +159,10 @@ mkCaseBranch task =
                 , ")"
                 ]
 
-mkCaseMatch :: Task -> String
+-- | Generates Haskell source code as String for the pattern to be matched on a
+--   value of type "Command" produced by the 'mkCommandSum'
+mkCaseMatch :: Task -- ^ The 'Task'
+            -> String
 mkCaseMatch task =
     case taskArgs task of
         NoArgs -> ""
@@ -160,6 +171,8 @@ mkCaseMatch task =
         PositionalArgs args ->
             mkArgsList args
 
+-- | Generates a String of the form "arg0 arg1 arg2 ..." where the number of
+--   "argN"'s is equal to the length of the input list.
 mkArgsList :: [String] -> String
 mkArgsList = unwords . zipWith3 (\a i _ -> a ++ show i) (repeat "arg") [0 :: Int ..]
 
@@ -226,6 +239,10 @@ mkTaskArgs fileContent = case findArgs fileContent of
     then stripArgs args
     else processPositional args
 
+-- | Creates a 'PositionalArgs' value from the given String.
+--
+-- >>> processPositional "data Args = Args Int String"
+-- PositionalArgs ["Int","String"]
 processPositional :: String -> TaskArgs
 processPositional str =
     PositionalArgs
